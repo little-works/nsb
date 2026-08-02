@@ -1,0 +1,13 @@
+.nsb-icon {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.nsb-icon > svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.nsb-icon > svg:not([fill]) {
+  fill: currentColor;
+}

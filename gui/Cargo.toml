@@ -1,0 +1,40 @@
+[package]
+name = "nsb-gui"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Windows desktop manager for sing-box"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1"
+auto-launch = "0.6"
+axum = { version = "0.8", features = ["json", "multipart", "ws"] }
+chrono = { version = "0.4", features = ["clock"] }
+cron = "0.12"
+futures-util = "0.3"
+image = { version = "0.25", default-features = false, features = ["png"] }
+log.workspace = true
+nsb-core.workspace = true
+open = "5"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+rquickjs = { version = "0.8", features = ["loader"] }
+tao = "0.34"
+time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "local-time"] }
+tray-icon = { version = "0.21", default-features = false }
+ts-rs.workspace = true
+webbrowser = "1"
+
+[build-dependencies]
+embed-resource = "3.0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Threading"] }

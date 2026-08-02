@@ -1,0 +1,10 @@
+{
+  "name": "nsb",
+  "private": true,
+  "scripts": {
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "lefthook": "^2.1.9"
+  }
+}

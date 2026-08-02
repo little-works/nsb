@@ -1,0 +1,23 @@
+# System Files
+.DS_Store
+Thumbs.db
+
+/target/
+
+/gui/dev-data/*
+!/gui/dev-data/.gitkeep
+/opencode.json
+dist
+.cache/
+node_modules
+/tmp
+
+# Private AI/editor workflow files
+/.agents/
+/.codex/
+/.trellis/
+/.zed/
+/AGENTS.md
+/HANDOFF.md
+/task.md
+/skills-lock.json
