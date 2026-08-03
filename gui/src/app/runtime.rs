@@ -191,6 +191,7 @@ impl GuiRuntime {
     pub async fn save_runtime_settings(
         &mut self,
         mixed_port: u16,
+        app_port: u16,
         allow_lan: bool,
         system_proxy_enabled: bool,
     ) -> Result<(), String> {
@@ -201,6 +202,7 @@ impl GuiRuntime {
         self.controller
             .save_runtime_settings(
                 mixed_port,
+                app_port,
                 allow_lan,
                 system_proxy_enabled,
                 &self.app_config_store,

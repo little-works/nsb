@@ -15,6 +15,7 @@ defineProps<SettingsPageProps>();
 const settingsStore = useSettingsStore();
 const {
   allowLan,
+  appPort,
   autoLaunchEnabled,
   autoLaunchLoading,
   kernelVersion,
@@ -42,6 +43,7 @@ export default __render<SettingsPageProps>(() => (
         <PageContent class="pb-24 pt-4">
           <GeneralSection
             allowLan={allowLan.value}
+            appPort={appPort.value}
             autoLaunchEnabled={autoLaunchEnabled.value}
             autoLaunchLoading={autoLaunchLoading.value}
             loading={loading.value}
@@ -49,6 +51,7 @@ export default __render<SettingsPageProps>(() => (
             saving={saving.value}
             systemProxyEnabled={systemProxyEnabled.value}
             onMixedPortChange={settingsStore.setMixedPort}
+            onAppPortChange={settingsStore.setAppPort}
             onAllowLanChange={async (value) => {
               await settingsStore.updateAllowLan(value);
             }}
@@ -56,6 +59,9 @@ export default __render<SettingsPageProps>(() => (
               await settingsStore.setAutoLaunchEnabled(value);
             }}
             onMixedPortBlur={async () => {
+              await settingsStore.saveIfDirty();
+            }}
+            onAppPortBlur={async () => {
               await settingsStore.saveIfDirty();
             }}
             onSystemProxyEnabledChange={async (value) => {

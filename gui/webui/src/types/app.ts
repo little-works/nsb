@@ -76,6 +76,7 @@ export interface SaveProfilePayload {
 
 export interface SaveSettingsPayload {
   mixed_port: number;
+  app_port: number;
   allow_lan: boolean;
   system_proxy_enabled: boolean;
 }

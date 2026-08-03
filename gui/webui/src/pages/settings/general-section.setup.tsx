@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n';
 
 export interface GeneralSectionProps {
   mixedPort: string;
+  appPort: string;
   allowLan: boolean;
   autoLaunchEnabled: boolean;
   autoLaunchLoading: boolean;
@@ -17,6 +18,8 @@ export interface GeneralSectionProps {
   saving: boolean;
   onMixedPortChange?: (value: string) => void;
   onMixedPortBlur?: () => void | Promise<void>;
+  onAppPortChange?: (value: string) => void;
+  onAppPortBlur?: () => void | Promise<void>;
   onAllowLanChange?: (value: boolean) => void | Promise<void>;
   onAutoLaunchEnabledChange?: (value: boolean) => void | Promise<void>;
   onSystemProxyEnabledChange?: (value: boolean) => void | Promise<void>;
@@ -129,6 +132,33 @@ export default __render<GeneralSectionProps>(() => {
         </h3>
       </div>
       <div class="overflow-hidden rounded border border-outline-variant bg-surface-container-lowest">
+        <div class="border-b border-outline-variant/50 p-4">
+          <label class="flex items-center gap-4">
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium leading-5 text-on-surface">
+                {t('settings.appPort')}
+              </p>
+              <p class="text-sm leading-5 text-on-surface-variant">
+                {t('settings.appPortDesc')}
+              </p>
+            </div>
+            <input
+              class="h-9 w-20 shrink-0 rounded border border-outline-variant bg-surface px-3 text-sm text-on-surface outline-none transition-all focus:border-primary"
+              disabled={disabled}
+              inputmode="numeric"
+              placeholder={t('settings.appPortPlaceholder')}
+              value={props.appPort}
+              onInput={(event) =>
+                props.onAppPortChange?.(
+                  (event.target as HTMLInputElement).value,
+                )
+              }
+              onBlur={() => {
+                void props.onAppPortBlur?.();
+              }}
+            />
+          </label>
+        </div>
         <div class="border-b border-outline-variant/50 p-4">
           <label class="flex items-center gap-4">
             <div class="min-w-0 flex-1">

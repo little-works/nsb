@@ -115,6 +115,12 @@ const enUS = {
     mixedPort: 'Mixed Port',
     mixedPortDesc:
       'The GUI writes this to the generated sing-box inbound listening port.',
+    appPort: 'App Port',
+    appPortDesc:
+      'The local WebUI server will use this port after the next launch.',
+    appPortPlaceholder: '8787',
+    appPortRestartRequired:
+      'The app port will take effect after the next launch.',
     allowLan: 'Allow LAN Connections',
     allowLanDesc:
       'Allow devices on the local network to connect through this proxy. The kernel restarts automatically to apply this change.',
@@ -243,6 +249,7 @@ const enUS = {
     saveSettingsTitle: 'Settings operation failed',
     settingsSaved: 'Settings saved.',
     invalidPort: 'Enter a valid mixed port (1–65535).',
+    invalidAppPort: 'Enter a valid app port (1–65535).',
     kernelImport: 'Failed to import the sing-box core.',
     kernelDownload: 'Failed to download the sing-box core.',
     kernelAction: 'Kernel operation failed',
@@ -377,6 +384,10 @@ const zhCN = {
     mixedPort: '混合端口',
     mixedPortDesc: 'GUI 会把它写入最终生成的 sing-box inbound 监听端口。',
     mixedPortPlaceholder: '7990',
+    appPort: '应用端口',
+    appPortDesc: '本地 WebUI 服务会在下次启动后使用此端口。',
+    appPortPlaceholder: '8787',
+    appPortRestartRequired: '应用端口将在下次启动后生效。',
     allowLan: '允许局域网连接',
     allowLanDesc:
       '允许同一局域网内的设备通过此代理连接。更改后内核会自动重启。',
@@ -494,6 +505,7 @@ const zhCN = {
     saveSettingsTitle: '设置操作失败',
     settingsSaved: '设置已保存。',
     invalidPort: '请输入有效的混合端口（1–65535）。',
+    invalidAppPort: '请输入有效的应用端口（1–65535）。',
     kernelImport: '导入 sing-box 内核失败。',
     kernelDownload: '下载 sing-box 内核失败。',
     kernelAction: '内核操作失败',

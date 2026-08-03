@@ -12,6 +12,7 @@ use super::{ApiResponse, simple_response};
 #[derive(Debug, Deserialize)]
 pub struct SaveSettingsRequest {
     mixed_port: u16,
+    app_port: u16,
     allow_lan: bool,
     #[serde(default)]
     system_proxy_enabled: bool,
@@ -45,6 +46,7 @@ pub async fn save_settings(
     match guard
         .save_runtime_settings(
             request.mixed_port,
+            request.app_port,
             request.allow_lan,
             request.system_proxy_enabled,
         )

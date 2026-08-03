@@ -17,27 +17,32 @@ export const useSettingsStore = defineStore('settings', () => {
   const appSnapshot = useAppSnapshot();
   const saving = ref(false);
   const mixedPort = ref('7990');
+  const appPort = ref('8787');
   const allowLan = ref(false);
   const systemProxyEnabled = ref(false);
   const requestedAutoLaunchEnabled = ref(false);
   const kernelVersion = ref('--');
   const latestKernelVersion = ref('');
   const initialMixedPort = ref('7990');
+  const initialAppPort = ref('8787');
   const initialAllowLan = ref(false);
   const initialSystemProxyEnabled = ref(false);
 
   const settingsDirty = computed(
     () =>
       mixedPort.value !== initialMixedPort.value ||
+      appPort.value !== initialAppPort.value ||
       allowLan.value !== initialAllowLan.value ||
       systemProxyEnabled.value !== initialSystemProxyEnabled.value,
   );
 
   function syncFormWithSnapshot(snapshot: AppSnapshot) {
     mixedPort.value = String(snapshot.state.gui_config.mixed_port);
+    appPort.value = String(snapshot.state.gui_config.app_port);
     allowLan.value = snapshot.state.gui_config.allow_lan;
     systemProxyEnabled.value = snapshot.state.gui_config.system_proxy_enabled;
     initialMixedPort.value = mixedPort.value;
+    initialAppPort.value = appPort.value;
     initialAllowLan.value = allowLan.value;
     initialSystemProxyEnabled.value = systemProxyEnabled.value;
     kernelVersion.value = snapshot.state.kernel.version;
@@ -159,6 +164,7 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     const parsedPort = Number.parseInt(mixedPort.value, 10);
+    const parsedAppPort = Number.parseInt(appPort.value, 10);
     if (
       !Number.isInteger(parsedPort) ||
       parsedPort <= 0 ||
@@ -167,11 +173,21 @@ export const useSettingsStore = defineStore('settings', () => {
       toast.error({ title: i18n.global.t('errors.invalidPort') });
       return false;
     }
+    if (
+      !Number.isInteger(parsedAppPort) ||
+      parsedAppPort <= 0 ||
+      parsedAppPort > 65535
+    ) {
+      toast.error({ title: i18n.global.t('errors.invalidAppPort') });
+      return false;
+    }
 
+    const appPortChanged = appPort.value !== initialAppPort.value;
     saving.value = true;
     try {
       await saveSettings({
         mixed_port: parsedPort,
+        app_port: parsedAppPort,
         allow_lan: allowLan.value,
         system_proxy_enabled: systemProxyEnabled.value,
       });
@@ -180,7 +196,12 @@ export const useSettingsStore = defineStore('settings', () => {
         throw new Error(i18n.global.t('errors.loadSettings'));
       }
       syncFormWithSnapshot(result.data);
-      toast.info({ title: i18n.global.t('errors.settingsSaved') });
+      toast.info({
+        title: i18n.global.t('errors.settingsSaved'),
+        content: appPortChanged
+          ? i18n.global.t('settings.appPortRestartRequired')
+          : undefined,
+      });
       return true;
     } catch (error) {
       toast.error({
@@ -198,6 +219,10 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setMixedPort(value: string) {
     mixedPort.value = value;
+  }
+
+  function setAppPort(value: string) {
+    appPort.value = value;
   }
 
   async function saveIfDirty() {
@@ -218,6 +243,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
+    appPort,
     allowLan,
     autoLaunchEnabled,
     autoLaunchLoading,
@@ -232,6 +258,7 @@ export const useSettingsStore = defineStore('settings', () => {
     saveIfDirty,
     saveRuntimeSettings,
     setAutoLaunchEnabled,
+    setAppPort,
     setMixedPort,
     updateAllowLan,
     updateSystemProxyEnabled,

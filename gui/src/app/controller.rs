@@ -473,6 +473,7 @@ impl AppController {
     pub async fn save_runtime_settings(
         &mut self,
         mixed_port: u16,
+        app_port: u16,
         allow_lan: bool,
         system_proxy_enabled: bool,
         app_config_store: &AppConfigStore,
@@ -480,9 +481,13 @@ impl AppController {
         if mixed_port == 0 {
             return Err(String::from("The mixed inbound port cannot be 0."));
         }
+        if app_port == 0 {
+            return Err(String::from("The application port cannot be 0."));
+        }
 
         SystemProxyHost::configure(system_proxy_enabled, mixed_port)?;
         self.state.gui_config.mixed_port = mixed_port;
+        self.state.gui_config.app_port = app_port;
         self.state.gui_config.allow_lan = allow_lan;
         self.state.gui_config.system_proxy_enabled = system_proxy_enabled;
         app_config_store.save(&self.state.gui_config).await
