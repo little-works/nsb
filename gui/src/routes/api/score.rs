@@ -155,9 +155,9 @@ pub async fn clear_logs(State(ctx): State<RouteState>) -> Json<ApiResponse<bool>
                 let guard = ctx.runtime.lock().await;
                 guard.singbox_host.log_path().to_path_buf()
             };
-            tokio::fs::write(&log_path, b"")
-                .await
-                .map_err(|err| format!("Failed to clear core log: {}: {err}", log_path.display()))?;
+            tokio::fs::write(&log_path, b"").await.map_err(|err| {
+                format!("Failed to clear core log: {}: {err}", log_path.display())
+            })?;
             Ok(true)
         }
         .await,
@@ -382,9 +382,12 @@ async fn read_log_history(path: PathBuf) -> Result<Vec<String>, String> {
     const MAX_HISTORY_BYTES: u64 = 256 * 1024;
     const MAX_HISTORY_LINES: usize = 500;
 
-    let metadata = tokio::fs::metadata(&path)
-        .await
-        .map_err(|err| format!("Failed to read core log metadata: {}: {err}", path.display()))?;
+    let metadata = tokio::fs::metadata(&path).await.map_err(|err| {
+        format!(
+            "Failed to read core log metadata: {}: {err}",
+            path.display()
+        )
+    })?;
     let start = metadata.len().saturating_sub(MAX_HISTORY_BYTES);
     let mut file = File::open(&path)
         .await

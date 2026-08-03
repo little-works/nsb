@@ -105,7 +105,12 @@ pub async fn import_kernel_binary(
         match multipart.next_field().await {
             Ok(Some(field)) if field.name() == Some("file") => match field.bytes().await {
                 Ok(bytes) if !bytes.is_empty() => break bytes,
-                Ok(_) => return Json(ApiResponse::failure(String::from("Imported file is empty."), None)),
+                Ok(_) => {
+                    return Json(ApiResponse::failure(
+                        String::from("Imported file is empty."),
+                        None,
+                    ));
+                }
                 Err(err) => {
                     return Json(ApiResponse::failure(
                         format!("Failed to read imported file: {err}"),
@@ -165,7 +170,11 @@ pub async fn download_latest_kernel(
     let release = match fetch_latest_release().await {
         Ok(release) => release,
         Err(err) => {
-            crate::route_log!(ctx, "warn", "failed to fetch latest sing-box release: {err}");
+            crate::route_log!(
+                ctx,
+                "warn",
+                "failed to fetch latest sing-box release: {err}"
+            );
             return Json(ApiResponse::failure(err, None));
         }
     };
@@ -218,7 +227,11 @@ pub async fn download_latest_kernel(
         match download_release_asset(&asset.browser_download_url, archive_path, asset.size).await {
             Ok(archive_path) => archive_path,
             Err(err) => {
-                crate::route_log!(ctx, "warn", "failed to download sing-box release asset: {err}");
+                crate::route_log!(
+                    ctx,
+                    "warn",
+                    "failed to download sing-box release asset: {err}"
+                );
                 return Json(ApiResponse::failure(err, None));
             }
         };
@@ -232,7 +245,11 @@ pub async fn download_latest_kernel(
     let binary = match unpack_kernel_binary(&data_dir, &archive_path) {
         Ok(binary) => binary,
         Err(err) => {
-            crate::route_log!(ctx, "warn", "failed to extract sing-box release asset: {err}");
+            crate::route_log!(
+                ctx,
+                "warn",
+                "failed to extract sing-box release asset: {err}"
+            );
             return Json(ApiResponse::failure(err, None));
         }
     };
@@ -302,8 +319,10 @@ async fn download_release_asset(
     let parent = archive_path
         .parent()
         .ok_or_else(|| String::from("Unable to determine sing-box download directory."))?;
-    fs::create_dir_all(parent).map_err(|err| format!("Failed to create sing-box download directory: {err}"))?;
-    fs::write(&archive_path, bytes).map_err(|err| format!("Failed to save sing-box download file: {err}"))?;
+    fs::create_dir_all(parent)
+        .map_err(|err| format!("Failed to create sing-box download directory: {err}"))?;
+    fs::write(&archive_path, bytes)
+        .map_err(|err| format!("Failed to save sing-box download file: {err}"))?;
     Ok(archive_path)
 }
 
@@ -384,14 +403,18 @@ fn unpack_kernel_binary(data_dir: &Path, archive_path: &Path) -> Result<Vec<u8>,
             .as_nanos()
     ));
     let extract_dir = temporary_dir.join("extract");
-    fs::create_dir_all(&extract_dir).map_err(|err| format!("Failed to create temporary sing-box directory: {err}"))?;
+    fs::create_dir_all(&extract_dir)
+        .map_err(|err| format!("Failed to create temporary sing-box directory: {err}"))?;
 
     let result = (|| {
         let output = extract_archive(archive_path, &extract_dir)?;
         if !output.status.success() {
             let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
             return Err(if detail.is_empty() {
-                format!("Failed to extract sing-box release archive; exit status: {}", output.status)
+                format!(
+                    "Failed to extract sing-box release archive; exit status: {}",
+                    output.status
+                )
             } else {
                 format!(
                     "Failed to extract sing-box release archive; exit status: {}: {detail}",
@@ -399,9 +422,11 @@ fn unpack_kernel_binary(data_dir: &Path, archive_path: &Path) -> Result<Vec<u8>,
                 )
             });
         }
-        let binary_path = find_file(&extract_dir, binary_name)
-            .ok_or_else(|| String::from("sing-box executable was not found in the release archive."))?;
-        fs::read(binary_path).map_err(|err| format!("Failed to read extracted sing-box binary: {err}"))
+        let binary_path = find_file(&extract_dir, binary_name).ok_or_else(|| {
+            String::from("sing-box executable was not found in the release archive.")
+        })?;
+        fs::read(binary_path)
+            .map_err(|err| format!("Failed to read extracted sing-box binary: {err}"))
     })();
 
     let _ = fs::remove_dir_all(temporary_dir);

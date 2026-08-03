@@ -38,6 +38,7 @@ const formSource = ref('');
 const formHeaders = ref<import('@/types').ProfileHeader[]>([]);
 const formRemotes = ref<ProfileRemote[]>([]);
 const formHook = ref('');
+const formKeepSubscriptionGroupsAndRules = ref(false);
 const updateIntervalHours = ref('');
 const updateCron = ref('');
 const nodeEditorOpen = ref(false);
@@ -97,6 +98,7 @@ function resetForm() {
   formHeaders.value = [];
   formRemotes.value = [];
   formHook.value = '';
+  formKeepSubscriptionGroupsAndRules.value = false;
   updateIntervalHours.value = '';
   updateCron.value = '';
 }
@@ -201,6 +203,8 @@ async function handleSubmit() {
           headers: remote.headers.filter((header) => header.key.trim()),
         })),
       hook: formHook.value.trim() || null,
+      keep_subscription_groups_and_rules:
+        formKeepSubscriptionGroupsAndRules.value,
       update_interval_hours: updateIntervalHours.value
         ? Number(updateIntervalHours.value)
         : null,

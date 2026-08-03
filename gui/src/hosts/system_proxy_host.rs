@@ -34,7 +34,9 @@ impl SystemProxyHost {
         #[cfg(not(windows))]
         {
             if enabled {
-                return Err(String::from("Configuring the system proxy is not supported on this platform."));
+                return Err(String::from(
+                    "Configuring the system proxy is not supported on this platform.",
+                ));
             }
             let _ = mixed_port;
             Ok(())

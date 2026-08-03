@@ -31,11 +31,11 @@ impl AutoLaunchHost {
     }
 
     fn auto_launch() -> Result<auto_launch::AutoLaunch, String> {
-        let executable =
-            std::env::current_exe().map_err(|err| format!("Failed to get current executable path: {err}"))?;
-        let executable = executable
-            .to_str()
-            .ok_or_else(|| String::from("The current executable path contains unsupported characters."))?;
+        let executable = std::env::current_exe()
+            .map_err(|err| format!("Failed to get current executable path: {err}"))?;
+        let executable = executable.to_str().ok_or_else(|| {
+            String::from("The current executable path contains unsupported characters.")
+        })?;
 
         let mut builder = AutoLaunchBuilder::new();
         builder.set_app_name(APP_NAME).set_app_path(executable);

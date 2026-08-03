@@ -1,8 +1,8 @@
 use anyhow::Context;
 use image::ImageFormat;
 use tray_icon::{
-    menu::{CheckMenuItem, Menu, MenuEvent, MenuItem},
     Icon, TrayIcon, TrayIconBuilder,
+    menu::{CheckMenuItem, Menu, MenuEvent, MenuItem},
 };
 
 use crate::app::AppAction;
@@ -30,8 +30,7 @@ impl TrayHost {
             system_proxy_enabled,
             None,
         );
-        let data_dir_item =
-            MenuItem::new(tray_label(app_language, TrayLabel::DataDir), true, None);
+        let data_dir_item = MenuItem::new(tray_label(app_language, TrayLabel::DataDir), true, None);
         let exit_item = MenuItem::new(tray_label(app_language, TrayLabel::Exit), true, None);
 
         menu.append(&open_item)

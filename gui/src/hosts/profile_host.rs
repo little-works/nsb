@@ -23,9 +23,12 @@ impl ProfileHost {
     pub async fn save_runtime(&self, id: &str, content: &str) -> Result<(), String> {
         let path = self.runtime_path(id);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|err| format!("Failed to create Profile cache directory: {}: {err}", parent.display()))?;
+            fs::create_dir_all(parent).await.map_err(|err| {
+                format!(
+                    "Failed to create Profile cache directory: {}: {err}",
+                    parent.display()
+                )
+            })?;
         }
         fs::write(&path, content)
             .await
@@ -65,12 +68,18 @@ impl ProfileHost {
         let path = self.remote_raw_path(profile_id, remote_name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(|err| {
-                format!("Failed to create Remote raw cache directory: {}: {err}", parent.display())
+                format!(
+                    "Failed to create Remote raw cache directory: {}: {err}",
+                    parent.display()
+                )
             })?;
         }
-        fs::write(&path, content)
-            .await
-            .map_err(|err| format!("Failed to write Remote raw cache: {}: {err}", path.display()))?;
+        fs::write(&path, content).await.map_err(|err| {
+            format!(
+                "Failed to write Remote raw cache: {}: {err}",
+                path.display()
+            )
+        })?;
 
         Ok(())
     }
@@ -81,10 +90,12 @@ impl ProfileHost {
         remote_name: &str,
     ) -> Result<Option<String>, String> {
         let path = self.remote_raw_path(profile_id, remote_name);
-        if !fs::try_exists(&path)
-            .await
-            .map_err(|err| format!("Failed to check Remote raw cache: {}: {err}", path.display()))?
-        {
+        if !fs::try_exists(&path).await.map_err(|err| {
+            format!(
+                "Failed to check Remote raw cache: {}: {err}",
+                path.display()
+            )
+        })? {
             return Ok(None);
         }
         fs::read_to_string(&path)
@@ -155,9 +166,12 @@ impl ProfileHost {
         }
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|err| format!("Failed to create Profile cache directory: {}: {err}", parent.display()))?;
+            fs::create_dir_all(parent).await.map_err(|err| {
+                format!(
+                    "Failed to create Profile cache directory: {}: {err}",
+                    parent.display()
+                )
+            })?;
         }
 
         fs::rename(&legacy_path, &path).await.map_err(|err| {
@@ -191,7 +205,10 @@ impl ProfileHost {
 
         if metadata.file_type().is_dir() {
             fs::remove_dir_all(path).await.map_err(|err| {
-                format!("Failed to delete Profile cache directory: {}: {err}", path.display())
+                format!(
+                    "Failed to delete Profile cache directory: {}: {err}",
+                    path.display()
+                )
             })
         } else {
             fs::remove_file(path)

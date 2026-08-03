@@ -86,19 +86,11 @@ impl Default for AppConfig {
 }
 
 fn default_app_port() -> u16 {
-    if cfg!(debug_assertions) {
-        18787
-    } else {
-        8787
-    }
+    if cfg!(debug_assertions) { 18787 } else { 8787 }
 }
 
 fn default_mixed_port() -> u16 {
-    if cfg!(debug_assertions) {
-        17990
-    } else {
-        7990
-    }
+    if cfg!(debug_assertions) { 17990 } else { 7990 }
 }
 
 pub struct AppConfigStore {
