@@ -500,7 +500,7 @@ export default __render<ProfileDialogProps>(() => {
             <h3 class="text-lg font-bold leading-6 text-on-surface">
               {t('profiles.dialog.customHook')}
             </h3>
-            {mounted.value ? (
+            {mounted.value && (
               <Popover
                 trigger="click"
                 placement="right-start"
@@ -568,8 +568,6 @@ export default __render<ProfileDialogProps>(() => {
                   ),
                 }}
               />
-            ) : (
-              renderHookHelpButton(t('profiles.dialog.hookHelpAriaLabel'))
             )}
           </div>
           <div
