@@ -73,6 +73,10 @@ async function submit() {
     };
     if (profileId) await updateProfile(profileId, payload);
     else await createProfile(payload);
+    const result = await appSnapshot.refetch();
+    if (!result.data) {
+      throw new Error(i18n.global.t('profiles.loadFailed'));
+    }
     close();
   } catch (error) {
     toast.error({
