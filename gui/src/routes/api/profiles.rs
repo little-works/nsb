@@ -283,27 +283,23 @@ pub async fn create_profile(
     let mut message = String::from("Profile added.");
     if matches!(created.kind, ProfileKind::File) && should_select_after_download {
         let mut guard = ctx.runtime.lock().await;
-        let crate::app::GuiRuntime {
-            controller,
-            app_config_store,
-            ..
-        } = &mut *guard;
-        let _ = controller
-            .set_current_profile(created.id.clone(), app_config_store)
-            .await;
+        if let Err(err) = guard.activate_profile(created.id.clone()).await {
+            return Json(ApiResponse::failure(
+                err,
+                Some(profile_list_response(&guard)),
+            ));
+        }
     } else if matches!(created.kind, ProfileKind::Url) {
         if should_select_after_download {
             match update_profile_runtime(ctx.runtime.clone(), created.id.clone(), false).await {
                 Ok(()) => {
                     let mut guard = ctx.runtime.lock().await;
-                    let crate::app::GuiRuntime {
-                        controller,
-                        app_config_store,
-                        ..
-                    } = &mut *guard;
-                    let _ = controller
-                        .set_current_profile(created.id.clone(), app_config_store)
-                        .await;
+                    if let Err(err) = guard.activate_profile(created.id.clone()).await {
+                        return Json(ApiResponse::failure(
+                            err,
+                            Some(profile_list_response(&guard)),
+                        ));
+                    }
                 }
                 Err(err) => message = format!("Profile added, but initial download failed: {err}"),
             }
