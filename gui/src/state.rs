@@ -24,6 +24,7 @@ pub enum KernelRuntimeSource {
 #[derive(Debug, Clone, Serialize)]
 pub struct KernelInfo {
     pub binary_path: String,
+    pub installed: bool,
     pub data_dir: String,
     pub config_path: String,
     #[serde(skip_serializing)]
@@ -130,6 +131,7 @@ impl AppState {
         Self {
             kernel: KernelInfo {
                 binary_path: String::new(),
+                installed: false,
                 data_dir: String::new(),
                 config_path: String::new(),
                 controller_addr: String::from("Assigned randomly at startup"),

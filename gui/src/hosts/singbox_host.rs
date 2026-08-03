@@ -81,6 +81,10 @@ impl SingBoxHost {
         &self.binary_path
     }
 
+    pub fn is_installed(&self) -> bool {
+        self.binary_path.is_file()
+    }
+
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
     }

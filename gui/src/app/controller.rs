@@ -43,6 +43,7 @@ impl AppController {
         profile_host: &ProfileHost,
     ) {
         self.state.kernel.binary_path = singbox_host.binary_path().display().to_string();
+        self.state.kernel.installed = singbox_host.is_installed();
         self.state.kernel.data_dir = singbox_host.display_data_dir();
         self.state.kernel.config_path = singbox_host.display_config_path();
 
@@ -716,6 +717,7 @@ impl AppController {
     }
 
     async fn sync_kernel_runtime(&mut self, singbox_host: &mut SingBoxHost) {
+        self.state.kernel.installed = singbox_host.is_installed();
         match singbox_host.running_pid().await {
             Ok(Some(pid)) => {
                 if let Ok(Some(launch_config)) = singbox_host.load_launch_config().await {

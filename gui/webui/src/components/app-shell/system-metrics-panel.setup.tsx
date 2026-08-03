@@ -5,21 +5,43 @@ import {
   CheckCircleFilled,
   RadioButtonUncheckedFilled,
   SpeedOutlined,
+  WarningAmberOutlined,
 } from '@vicons/material';
+import { Tooltip } from '@/components/tooltip';
 import { useAppSnapshot } from '@/store/app';
 import { useScoreStreamData } from '@/hooks/use-score-stream';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/icon';
 const { traffic } = useScoreStreamData();
 const appSnapshot = useAppSnapshot();
+const { t } = useI18n();
 const coreStatus = computed(() => {
+  const installed = appSnapshot.data.value?.state.kernel.installed ?? true;
   const running = appSnapshot.data.value?.state.kernel.status === 'Running';
+  if (!installed) {
+    return {
+      icon: WarningAmberOutlined,
+      label: t('traffic.noCore'),
+      class: 'text-tertiary',
+      href: '/webui/settings',
+      tooltip: t('traffic.noCoreAction'),
+    };
+  }
   return running
-    ? { icon: CheckCircleFilled, label: 'Running', class: 'text-secondary' }
+    ? {
+        icon: CheckCircleFilled,
+        label: t('traffic.running'),
+        class: 'text-secondary',
+        href: undefined,
+        tooltip: undefined,
+      }
     : {
         icon: RadioButtonUncheckedFilled,
-        label: 'Stopped',
+        label: t('traffic.stopped'),
         class: 'text-on-surface-variant',
+        href: undefined,
+        tooltip: undefined,
       };
 });
 const mixedPort = computed(() => {
@@ -44,6 +66,14 @@ defineOptions({ name: 'SystemMetricsPanel' });
 export default __render(() => {
   const status = coreStatus.value;
   const StatusIcon = status.icon;
+  const statusContent = (
+    <>
+      <Icon class={['text-sm', status.class]}>
+        <StatusIcon />
+      </Icon>
+      <span>{status.label}</span>
+    </>
+  );
   return (
     <section class="rounded border border-outline-variant bg-surface-container p-3">
       <div class="mb-3 flex items-center justify-between text-on-surface">
@@ -55,12 +85,24 @@ export default __render(() => {
             Traffic
           </span>
         </div>
-        <div class="flex h-6 items-center gap-1 rounded-full bg-surface-container-high px-2 text-xs text-on-surface-variant">
-          <Icon class={['text-sm', status.class]}>
-            <StatusIcon />
-          </Icon>
-          <span>{status.label}</span>
-        </div>
+        {status.href ? (
+          <Tooltip content={status.tooltip}>
+            <a
+              aria-label={status.tooltip}
+              href={status.href}
+              class="flex h-6 items-center gap-1 rounded-full bg-surface-container-high px-2
+                text-xs text-on-surface-variant outline-none
+                transition-colors hover:bg-surface-container-highest
+                focus-visible:ring-2 focus-visible:ring-tertiary"
+            >
+              {statusContent}
+            </a>
+          </Tooltip>
+        ) : (
+          <div class="flex h-6 items-center gap-1 rounded-full bg-surface-container-high px-2 text-xs text-on-surface-variant">
+            {statusContent}
+          </div>
+        )}
       </div>
       <div class="space-y-3">
         <div class="grid grid-cols-2 gap-2">

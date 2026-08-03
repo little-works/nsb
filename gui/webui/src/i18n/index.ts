@@ -75,6 +75,12 @@ const enUS = {
     groupNotFound: 'Proxy group was not found.',
     latencyFailed: 'Latency test failed.',
   },
+  traffic: {
+    running: 'Running',
+    stopped: 'Stopped',
+    noCore: 'No core',
+    noCoreAction: 'Sing-box is not installed. Go to Settings.',
+  },
   connections: {
     title: 'Connections',
     subtitle: 'Live connections established by sing-box',
@@ -208,7 +214,8 @@ const enUS = {
       hookRemote: 'remote',
       hookRemotes: 'remotes',
       hookSingbox: 'singbox',
-      hookExampleCode: "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
+      hookExampleCode:
+        "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
     },
     editNodes: 'Edit nodes',
     delete: 'Delete profile',
@@ -330,6 +337,12 @@ const zhCN = {
     groupNotFound: '未找到对应的代理组。',
     latencyFailed: '测速失败。',
   },
+  traffic: {
+    running: '运行中',
+    stopped: '已停止',
+    noCore: '未安装',
+    noCoreAction: '未安装 Sing-box，前往设置。',
+  },
   connections: {
     title: '连接',
     subtitle: '由 sing-box 建立的实时连接',
@@ -439,7 +452,8 @@ const zhCN = {
       hookHelpTitle: '自定义钩子用法',
       hookGenerateIntro: '每次订阅源更新并生成基础 sing-box 配置后，都会调用 ',
       hookGenerateReturns: '。文件导入的配置不会执行它，且必须返回配置对象。',
-      hookFinalizeIntro: '每次 sing-box 启动前、NSB 写入运行时设置后，都会调用 ',
+      hookFinalizeIntro:
+        '每次 sing-box 启动前、NSB 写入运行时设置后，都会调用 ',
       hookFinalizeReturns: '。所有配置都会执行它，且必须返回配置对象。',
       hookFinalizeSingbox: '：传入钩子的最终配置。',
       hookHelpSingle: '在 onGenerate 中，单个订阅时使用 ',
@@ -451,7 +465,8 @@ const zhCN = {
       hookRemote: 'remote',
       hookRemotes: 'remotes',
       hookSingbox: 'singbox',
-      hookExampleCode: "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
+      hookExampleCode:
+        "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
     },
     editNodes: '编辑节点',
     delete: '删除配置',

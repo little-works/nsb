@@ -1,7 +1,16 @@
 export type RequestMethod =
-  'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PATCH';
+  | 'GET'
+  | 'POST'
+  | 'DELETE'
+  | 'PUT'
+  | 'HEAD'
+  | 'PATCH';
 export type RequestProxyMode =
-  'global' | 'none' | 'system' | 'kernel' | 'custom';
+  | 'global'
+  | 'none'
+  | 'system'
+  | 'kernel'
+  | 'custom';
 
 export type { AppConfig } from '@/rs-type/AppConfig';
 export type { AppLanguage } from '@/rs-type/AppLanguage';
@@ -25,6 +34,7 @@ export type AppPageTypes = (typeof AppPageType)[keyof typeof AppPageType];
 
 export interface KernelInfo {
   binary_path: string;
+  installed: boolean;
   data_dir: string;
   config_path: string;
   version: string;
