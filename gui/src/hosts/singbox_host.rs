@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    net::TcpListener,
+    net::{Ipv4Addr, SocketAddr, TcpListener},
     path::{Path, PathBuf},
     process,
     process::{Child, Command as StdCommand, Stdio},
@@ -23,6 +23,7 @@ use windows_sys::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
+use crate::app::profile_builder::run_finalize_hook;
 use crate::config::AppConfig;
 use crate::utils::command::command;
 use crate::utils::path::ensure_data_dir;
@@ -122,7 +123,10 @@ impl SingBoxHost {
             .map_err(|err| format!("Failed to read sing-box version: {err}"))?;
 
         if !output.status.success() {
-            return Err(format!("Failed to read sing-box version; exit status: {}", output.status));
+            return Err(format!(
+                "Failed to read sing-box version; exit status: {}",
+                output.status
+            ));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -180,13 +184,14 @@ impl SingBoxHost {
         &mut self,
         source: &str,
         gui_config: &AppConfig,
+        hook: Option<&str>,
     ) -> Result<LaunchConfig, String> {
         if self.running_pid().await?.is_some() {
             return Err(String::from("sing-box is already running."));
         }
 
         self.ensure_kernel_exists()?;
-        let launch_config = self.materialize_config(source, gui_config).await?;
+        let launch_config = self.materialize_config(source, gui_config, hook).await?;
 
         let log_file = prepare_log_file(&self.log_path)?;
         let err_log_file = log_file
@@ -233,9 +238,9 @@ impl SingBoxHost {
                     child
                         .kill()
                         .map_err(|err| format!("Failed to stop sing-box: {err}"))?;
-                    child
-                        .wait()
-                        .map_err(|err| format!("Failed while waiting for sing-box to exit: {err}"))?;
+                    child.wait().map_err(|err| {
+                        format!("Failed while waiting for sing-box to exit: {err}")
+                    })?;
                     self.clear_pid_file().await?;
                     return Ok(());
                 }
@@ -288,7 +293,7 @@ impl SingBoxHost {
             .await
             .map_err(|err| {
                 format!(
-                "Failed to check whether configuration file exists: {}: {err}",
+                    "Failed to check whether configuration file exists: {}: {err}",
                     self.config_path.display()
                 )
             })?
@@ -298,21 +303,26 @@ impl SingBoxHost {
 
         let body = tokio_fs::read_to_string(&self.config_path)
             .await
-            .map_err(|err| format!("Failed to read configuration file: {}: {err}", self.config_path.display()))?;
-        let config = serde_json::from_str::<SingBoxConfig>(&body)
-            .map_err(|err| format!("Failed to parse configuration file: {}: {err}", self.config_path.display()))?;
+            .map_err(|err| {
+                format!(
+                    "Failed to read configuration file: {}: {err}",
+                    self.config_path.display()
+                )
+            })?;
+        let config = serde_json::from_str::<SingBoxConfig>(&body).map_err(|err| {
+            format!(
+                "Failed to parse configuration file: {}: {err}",
+                self.config_path.display()
+            )
+        })?;
         let clash_api = config
             .experimental
-            .and_then(|experimental| experimental.clash_api);
+            .as_ref()
+            .and_then(|experimental| experimental.clash_api.as_ref());
 
-        Ok(clash_api.and_then(|api| {
-            let external_controller = api.external_controller?;
-            let secret = api.secret?;
-            Some(LaunchConfig {
-                external_controller,
-                secret,
-            })
-        }))
+        clash_api
+            .map(|_| launch_config_from_config(&config))
+            .transpose()
     }
 
     pub fn child_pid(&self) -> Option<u32> {
@@ -323,16 +333,32 @@ impl SingBoxHost {
         &self,
         source: &str,
         gui_config: &AppConfig,
+        hook: Option<&str>,
     ) -> Result<LaunchConfig, String> {
         self.ensure_workspace_dir()?;
         let config = self.load_sing_box_config(source).await?;
-        let (config, launch_config) = self.apply_gui_overrides(config, gui_config)?;
+        let mut config = self.apply_gui_overrides(config, gui_config)?;
+        if let Some(hook) = hook.filter(|value| !value.trim().is_empty()) {
+            let value = serde_json::to_value(&config).map_err(|err| {
+                format!("Failed to serialize final sing-box configuration for Profile hook: {err}")
+            })?;
+            let value = run_finalize_hook(hook, value)?;
+            config = serde_json::from_value(value).map_err(|err| {
+                format!("Profile hook onFinalize returned an invalid sing-box configuration: {err}")
+            })?;
+        }
+        let launch_config = launch_config_from_config(&config)?;
         let body = serde_json::to_string_pretty(&config)
             .map_err(|err| format!("Failed to serialize sing-box configuration: {err}"))?;
 
         tokio_fs::write(&self.config_path, body)
             .await
-            .map_err(|err| format!("Failed to write configuration file: {}: {err}", self.config_path.display()))?;
+            .map_err(|err| {
+                format!(
+                    "Failed to write configuration file: {}: {err}",
+                    self.config_path.display()
+                )
+            })?;
 
         Ok(launch_config)
     }
@@ -346,8 +372,12 @@ impl SingBoxHost {
     }
 
     fn ensure_kernel_dir(&self) -> Result<(), String> {
-        fs::create_dir_all(&self.kernel_dir)
-            .map_err(|err| format!("Failed to create core directory: {}: {err}", self.kernel_dir.display()))
+        fs::create_dir_all(&self.kernel_dir).map_err(|err| {
+            format!(
+                "Failed to create core directory: {}: {err}",
+                self.kernel_dir.display()
+            )
+        })
     }
 
     fn ensure_kernel_exists(&self) -> Result<(), String> {
@@ -356,7 +386,8 @@ impl SingBoxHost {
 
     async fn load_sing_box_config(&self, source: &str) -> Result<SingBoxConfig, String> {
         let body = self.read_config_source(source).await?;
-        serde_json::from_str(&body).map_err(|err| format!("Failed to parse sing-box configuration: {err}"))
+        serde_json::from_str(&body)
+            .map_err(|err| format!("Failed to parse sing-box configuration: {err}"))
     }
 
     async fn read_config_source(&self, source: &str) -> Result<String, String> {
@@ -382,7 +413,7 @@ impl SingBoxHost {
         &self,
         mut config: SingBoxConfig,
         gui_config: &AppConfig,
-    ) -> Result<(SingBoxConfig, LaunchConfig), String> {
+    ) -> Result<SingBoxConfig, String> {
         let controller_port = find_available_local_port()?;
         let controller_addr = format!("127.0.0.1:{controller_port}");
         let secret = generate_controller_secret(controller_port);
@@ -432,13 +463,7 @@ impl SingBoxHost {
         experimental.clash_api = Some(clash_api);
         config.experimental = Some(experimental);
 
-        Ok((
-            config,
-            LaunchConfig {
-                external_controller: controller_addr,
-                secret,
-            },
-        ))
+        Ok(config)
     }
 
     fn is_dev_mode(&self) -> bool {
@@ -457,7 +482,12 @@ impl SingBoxHost {
 
         let raw = tokio_fs::read_to_string(&self.pid_path)
             .await
-            .map_err(|err| format!("Failed to read PID file: {}: {err}", self.pid_path.display()))?;
+            .map_err(|err| {
+                format!(
+                    "Failed to read PID file: {}: {err}",
+                    self.pid_path.display()
+                )
+            })?;
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Ok(None);
@@ -480,9 +510,12 @@ impl SingBoxHost {
         };
         let body = serde_json::to_string(&marker)
             .map_err(|err| format!("Failed to serialize core process marker: {err}"))?;
-        tokio_fs::write(&self.pid_path, body)
-            .await
-            .map_err(|err| format!("Failed to write core process marker: {}: {err}", self.pid_path.display()))
+        tokio_fs::write(&self.pid_path, body).await.map_err(|err| {
+            format!(
+                "Failed to write core process marker: {}: {err}",
+                self.pid_path.display()
+            )
+        })
     }
 
     async fn clear_pid_file(&self) -> Result<(), String> {
@@ -495,9 +528,12 @@ impl SingBoxHost {
             return Ok(());
         }
 
-        tokio_fs::remove_file(&self.pid_path)
-            .await
-            .map_err(|err| format!("Failed to delete PID file: {}: {err}", self.pid_path.display()))
+        tokio_fs::remove_file(&self.pid_path).await.map_err(|err| {
+            format!(
+                "Failed to delete PID file: {}: {err}",
+                self.pid_path.display()
+            )
+        })
     }
 
     async fn wait_until_ready(
@@ -505,8 +541,8 @@ impl SingBoxHost {
         child: &mut Child,
         launch_config: &LaunchConfig,
     ) -> Result<(), String> {
-        let deadline = tokio::time::Instant::now()
-            + Duration::from_secs(CONTROLLER_START_TIMEOUT_SECS);
+        let deadline =
+            tokio::time::Instant::now() + Duration::from_secs(CONTROLLER_START_TIMEOUT_SECS);
         loop {
             if let Some(status) = child
                 .try_wait()
@@ -515,9 +551,13 @@ impl SingBoxHost {
                 let detail = last_log_line(&self.log_path);
                 return Err(match detail {
                     Some(detail) => {
-                        format!("sing-box exited immediately after startup (exit status: {status}): {detail}")
+                        format!(
+                            "sing-box exited immediately after startup (exit status: {status}): {detail}"
+                        )
                     }
-                    None => format!("sing-box exited immediately after startup (exit status: {status})."),
+                    None => format!(
+                        "sing-box exited immediately after startup (exit status: {status})."
+                    ),
                 });
             }
 
@@ -542,6 +582,56 @@ impl SingBoxHost {
     }
 }
 
+fn launch_config_from_config(config: &SingBoxConfig) -> Result<LaunchConfig, String> {
+    let clash_api = config
+        .experimental
+        .as_ref()
+        .and_then(|experimental| experimental.clash_api.as_ref())
+        .ok_or_else(|| {
+            String::from("Final sing-box configuration is missing experimental.clash_api.")
+        })?;
+    let external_controller = clash_api
+        .external_controller
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            String::from(
+                "Final sing-box configuration requires a non-empty experimental.clash_api.external_controller.",
+            )
+        })?;
+    let controller = external_controller.parse::<SocketAddr>().map_err(|_| {
+        format!(
+            "Final sing-box configuration has an invalid Clash API external_controller: {external_controller}. Use 127.0.0.1:<port> or 0.0.0.0:<port>."
+        )
+    })?;
+    if controller.port() == 0
+        || !matches!(
+            controller.ip(),
+            std::net::IpAddr::V4(ip) if ip == Ipv4Addr::LOCALHOST || ip == Ipv4Addr::UNSPECIFIED
+        )
+    {
+        return Err(format!(
+            "Final sing-box configuration has an unsupported Clash API external_controller: {external_controller}. Use 127.0.0.1:<port> or 0.0.0.0:<port>."
+        ));
+    }
+    let secret = clash_api
+        .secret
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            String::from(
+                "Final sing-box configuration requires a non-empty experimental.clash_api.secret.",
+            )
+        })?;
+
+    Ok(LaunchConfig {
+        external_controller: format!("127.0.0.1:{}", controller.port()),
+        secret: secret.to_string(),
+    })
+}
+
 fn ensure_kernel_binary_exists(binary_path: &Path) -> Result<(), String> {
     if binary_path.exists() {
         Ok(())
@@ -555,8 +645,12 @@ fn ensure_kernel_binary_exists(binary_path: &Path) -> Result<(), String> {
 
 fn prepare_log_file(path: &Path) -> Result<File, String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("Failed to create log directory: {}: {err}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Failed to create log directory: {}: {err}",
+                parent.display()
+            )
+        })?;
     }
 
     File::options()
@@ -568,8 +662,12 @@ fn prepare_log_file(path: &Path) -> Result<File, String> {
 
 fn clear_log_file(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("Failed to create log directory: {}: {err}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Failed to create log directory: {}: {err}",
+                parent.display()
+            )
+        })?;
     }
 
     File::create(path)
@@ -665,7 +763,9 @@ fn process_creation_time(pid: u32) -> Result<u64, String> {
 
 #[cfg(not(windows))]
 fn process_creation_time(_pid: u32) -> Result<u64, String> {
-    Err(String::from("Reading process creation time is not supported on this platform."))
+    Err(String::from(
+        "Reading process creation time is not supported on this platform.",
+    ))
 }
 
 fn process_name_by_pid(pid: u32) -> Result<String, String> {
@@ -679,13 +779,18 @@ fn process_name_by_pid(pid: u32) -> Result<String, String> {
             .output()
             .map_err(|err| format!("Failed to read process information: {err}"))?;
         if !output.status.success() {
-            return Err(format!("Failed to read process information; exit status: {}", output.status));
+            return Err(format!(
+                "Failed to read process information; exit status: {}",
+                output.status
+            ));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let line = stdout.lines().map(str::trim).find(|line| !line.is_empty());
         let Some(line) = line else {
-            return Err(String::from("Corresponding process information was not found"));
+            return Err(String::from(
+                "Corresponding process information was not found",
+            ));
         };
         if line
             .eq_ignore_ascii_case("INFO: No tasks are running which match the specified criteria.")
@@ -713,7 +818,10 @@ fn process_name_by_pid(pid: u32) -> Result<String, String> {
             .output()
             .map_err(|err| format!("Failed to read process information: {err}"))?;
         if !output.status.success() {
-            return Err(format!("Failed to read process information; exit status: {}", output.status));
+            return Err(format!(
+                "Failed to read process information; exit status: {}",
+                output.status
+            ));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -747,7 +855,10 @@ fn kill_process_by_pid(pid: u32) -> Result<(), String> {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let detail = stderr.trim();
             if detail.is_empty() {
-                return Err(format!("Failed to stop sing-box; exit status: {}", output.status));
+                return Err(format!(
+                    "Failed to stop sing-box; exit status: {}",
+                    output.status
+                ));
             }
             return Err(format!("Failed to stop sing-box: {detail}"));
         }
@@ -764,7 +875,10 @@ fn kill_process_by_pid(pid: u32) -> Result<(), String> {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let detail = stderr.trim();
             if detail.is_empty() {
-                return Err(format!("Failed to stop sing-box; exit status: {}", output.status));
+                return Err(format!(
+                    "Failed to stop sing-box; exit status: {}",
+                    output.status
+                ));
             }
             return Err(format!("Failed to stop sing-box: {detail}"));
         }
@@ -789,4 +903,61 @@ fn generate_controller_secret(port: u16) -> String {
     let counter = SECRET_COUNTER.fetch_add(1, Ordering::Relaxed);
     let pid = u64::from(process::id());
     format!("{nanos:032x}{pid:08x}{counter:08x}{port:04x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use nsb_core::{ClashApi, Experimental, SingBoxConfig};
+
+    use super::launch_config_from_config;
+
+    fn config_with_controller(controller: Option<&str>, secret: Option<&str>) -> SingBoxConfig {
+        let mut config = SingBoxConfig::default();
+        config.experimental = Some(Experimental {
+            clash_api: Some(ClashApi {
+                external_controller: controller.map(String::from),
+                secret: secret.map(String::from),
+                ..Default::default()
+            }),
+            cache_file: None,
+        });
+        config
+    }
+
+    #[test]
+    fn accepts_a_loopback_controller_address() {
+        let config = config_with_controller(Some("127.0.0.1:9090"), Some("secret"));
+
+        let launch_config = launch_config_from_config(&config).unwrap();
+
+        assert_eq!(launch_config.external_controller, "127.0.0.1:9090");
+        assert_eq!(launch_config.secret, "secret");
+    }
+
+    #[test]
+    fn normalizes_an_unspecified_controller_address_to_loopback() {
+        let config = config_with_controller(Some("0.0.0.0:9090"), Some("secret"));
+
+        let launch_config = launch_config_from_config(&config).unwrap();
+
+        assert_eq!(launch_config.external_controller, "127.0.0.1:9090");
+    }
+
+    #[test]
+    fn rejects_an_unsupported_controller_host() {
+        let config = config_with_controller(Some("192.168.1.2:9090"), Some("secret"));
+
+        let error = launch_config_from_config(&config).unwrap_err();
+
+        assert!(error.contains("unsupported Clash API external_controller"));
+    }
+
+    #[test]
+    fn rejects_a_missing_controller_secret() {
+        let config = config_with_controller(Some("127.0.0.1:9090"), None);
+
+        let error = launch_config_from_config(&config).unwrap_err();
+
+        assert!(error.contains("requires a non-empty experimental.clash_api.secret"));
+    }
 }

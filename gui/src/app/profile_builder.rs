@@ -119,7 +119,10 @@ fn parse_clash(
                 | "socks"
                 | "http"
         ) {
-            log::warn!("skipping unsupported Clash proxy type {type_} ({})", remote.name);
+            log::warn!(
+                "skipping unsupported Clash proxy type {type_} ({})",
+                remote.name
+            );
             continue;
         }
         rename_field(&mut outbound, "port", "server_port");
@@ -135,10 +138,12 @@ fn parse_clash(
     }
     let mut proxy_groups = Vec::new();
     for group in groups {
-        let mut outbound = group
-            .as_object()
-            .cloned()
-            .ok_or_else(|| format!("Remote {} contains an invalid Clash proxy-group", remote.name))?;
+        let mut outbound = group.as_object().cloned().ok_or_else(|| {
+            format!(
+                "Remote {} contains an invalid Clash proxy-group",
+                remote.name
+            )
+        })?;
         let type_ = outbound
             .remove("type")
             .and_then(|value| value.as_str().map(str::to_string))
@@ -352,6 +357,50 @@ mod tests {
             json!(["direct", "block", "block", "Proxy"])
         );
     }
+
+    #[test]
+    fn skips_an_optional_hook_and_preserves_the_configuration() {
+        let config = json!({"log": {"level": "info"}});
+
+        let result = run_hook(
+            "export function onFinalize(input) { return input.singbox; }",
+            "onGenerate",
+            json!({"singbox": config}),
+        )
+        .unwrap();
+
+        assert_eq!(result, json!({"log": {"level": "info"}}));
+    }
+
+    #[test]
+    fn dispatches_on_generate_with_its_input() {
+        let result = run_hook(
+            "export function onGenerate(input) {\
+                input.singbox.remote_name = input.remote.name; \
+                return input.singbox; \
+            }",
+            "onGenerate",
+            json!({"singbox": {}, "remote": {"name": "Primary"}}),
+        )
+        .unwrap();
+
+        assert_eq!(result, json!({"remote_name": "Primary"}));
+    }
+
+    #[test]
+    fn rejects_a_hook_return_value_that_is_not_a_configuration_object() {
+        let error = run_hook(
+            "export function onGenerate() { return []; }",
+            "onGenerate",
+            json!({"singbox": {}}),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Profile hook onGenerate must return a configuration object"
+        );
+    }
 }
 
 pub fn build_config(
@@ -399,9 +448,16 @@ pub fn build_config(
     outbounds.push(json!({"type":"block", "tag":"block"}));
     let mut config = template(outbounds);
     if let Some(hook) = hook.filter(|value| !value.trim().is_empty()) {
-        config = run_hook(hook, config, hook_remotes, multi_remote)?;
+        let mut input = json!({"singbox": config});
+        if multi_remote {
+            input["remotes"] = serde_json::to_value(hook_remotes).map_err(|err| err.to_string())?;
+        } else if let Some(remote) = hook_remotes.into_iter().next() {
+            input["remote"] = serde_json::to_value(remote).map_err(|err| err.to_string())?;
+        }
+        config = run_hook(hook, "onGenerate", input)?;
     }
-    serde_json::to_string_pretty(&config).map_err(|err| format!("Failed to serialize generated configuration: {err}"))
+    serde_json::to_string_pretty(&config)
+        .map_err(|err| format!("Failed to serialize generated configuration: {err}"))
 }
 
 fn dedupe(items: &mut Vec<Value>, seen: &mut HashSet<String>) {
@@ -423,28 +479,22 @@ fn template(outbounds: Vec<Value>) -> Value {
     json!({"outbounds": outbounds, "route": {"final":"direct", "rules":[{"action":"hijack-dns","protocol":"dns"},{"action":"route","outbound":"direct","clash_mode":"direct"},{"action":"route","outbound":"GLOBAL","clash_mode":"global"},{"action":"route","outbound":"direct","network":"icmp"},{"action":"route","outbound":"block","protocol":"quic"},{"action":"route","outbound":"block","rule_set":["Category-Ads"]},{"action":"route","outbound":"direct","rule_set":["GeoSite-Private","GeoSite-CN","GeoIP-Private","GeoIP-CN"]},{"action":"route","outbound":"PROXY","rule_set":["GeoLocation-!CN"]}],"rule_set":[{"tag":"Category-Ads","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs","format":"binary","download_detour":"direct"},{"tag":"GeoIP-Private","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/private.srs","format":"binary","download_detour":"direct"},{"tag":"GeoSite-Private","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/private.srs","format":"binary","download_detour":"direct"},{"tag":"GeoIP-CN","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs","format":"binary","download_detour":"direct"},{"tag":"GeoSite-CN","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs","format":"binary","download_detour":"direct"},{"tag":"GeoLocation-!CN","type":"remote","url":"https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs","format":"binary","download_detour":"direct"}],"auto_detect_interface":true,"default_domain_resolver":{"server":"Local-DNS"}},"dns":{"final":"Remote-DNS","servers":[{"tag":"Fake-IP","type":"fakeip","inet4_range":"198.18.0.0/15","inet6_range":"fc00::/18"},{"tag":"Local-DNS","type":"https","server":"223.5.5.5","server_port":443,"path":"/dns-query","domain_resolver":"Local-DNS-Resolver"},{"tag":"Local-DNS-Resolver","type":"udp","server":"223.5.5.5","server_port":53},{"tag":"Remote-DNS","type":"tls","server":"8.8.8.8","server_port":853,"detour":"PROXY","domain_resolver":"Remote-DNS-Resolver"},{"tag":"Remote-DNS-Resolver","type":"udp","server":"8.8.8.8","server_port":53,"detour":"PROXY"},{"tag":"dns-device-local","type":"local"}],"rules":[{"action":"route","server":"Local-DNS","clash_mode":"direct"},{"action":"route","server":"Remote-DNS","clash_mode":"global"},{"action":"route","server":"Local-DNS","rule_set":["GeoSite-CN"]},{"action":"route","server":"Remote-DNS","rule_set":["GeoLocation-!CN"]}],"independent_cache":false,"disable_cache":false,"disable_expire":false}})
 }
 
-fn run_hook(
-    source: &str,
-    config: Value,
-    remotes: Vec<RemoteSnapshot>,
-    multi_remote: bool,
-) -> Result<Value, String> {
-    let runtime = Runtime::new().map_err(|err| format!("Failed to initialize Profile hook runtime: {err}"))?;
-    let context =
-        Context::full(&runtime).map_err(|err| format!("Failed to initialize Profile hook context: {err}"))?;
-    let mut input = json!({"singbox": config});
-    if multi_remote {
-        input["remotes"] = serde_json::to_value(remotes).map_err(|err| err.to_string())?;
-    } else if let Some(remote) = remotes.into_iter().next() {
-        input["remote"] = serde_json::to_value(remote).map_err(|err| err.to_string())?;
-    }
+pub fn run_finalize_hook(source: &str, config: Value) -> Result<Value, String> {
+    run_hook(source, "onFinalize", json!({"singbox": config}))
+}
+
+fn run_hook(source: &str, function_name: &str, input: Value) -> Result<Value, String> {
+    let runtime = Runtime::new()
+        .map_err(|err| format!("Failed to initialize Profile hook runtime: {err}"))?;
+    let context = Context::full(&runtime)
+        .map_err(|err| format!("Failed to initialize Profile hook context: {err}"))?;
     let input = serde_json::to_string(&input).map_err(|err| err.to_string())?;
     let script = format!(
-        "{}\nJSON.stringify(beforeCreate({input}))",
-        source.replace("export function", "function")
+        "{}\ntypeof {function_name} === 'function' ? JSON.stringify({function_name}({input})) : JSON.stringify(({input}).singbox)",
+        source.replace("export ", "")
     );
     context
-        .with(|ctx| match ctx.eval::<String, _>(script) {
+        .with(|ctx| match ctx.eval::<Option<String>, _>(script) {
             Ok(value) => Ok(value),
             Err(error) => {
                 if matches!(&error, Error::Exception) {
@@ -458,19 +508,31 @@ fn run_hook(
                             stack
                         );
                         return Err(format!(
-                            "Profile hook execution failed:\nmessage: {message}\nstack:\n{stack}"
+                            "Profile hook {function_name} execution failed:\nmessage: {message}\nstack:\n{stack}"
                         ));
                     } else {
-                        log::error!("Profile hook QuickJS exception: unable to read exception object");
+                        log::error!(
+                            "Profile hook QuickJS exception: unable to read exception object"
+                        );
                     }
                 } else {
                     log::error!("Profile hook execution failed: {error}");
                 }
-                Err(format!("Profile hook execution failed: {error}"))
+                Err(format!("Profile hook {function_name} execution failed: {error}"))
             }
         })
         .and_then(|value| {
-            serde_json::from_str(&value)
-                .map_err(|err| format!("Profile hook returned invalid JSON: {err}"))
+            let value = value.ok_or_else(|| {
+                format!("Profile hook {function_name} did not return a configuration object")
+            })?;
+            let value: Value = serde_json::from_str(&value).map_err(|err| {
+                format!("Profile hook {function_name} returned invalid JSON: {err}")
+            })?;
+            if !value.is_object() {
+                return Err(format!(
+                    "Profile hook {function_name} must return a configuration object"
+                ));
+            }
+            Ok(value)
         })
 }

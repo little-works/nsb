@@ -89,11 +89,18 @@ impl AppController {
             return Err(String::from("The sing-box core is already running."));
         }
 
+        let current = self
+            .current_profile()
+            .cloned()
+            .ok_or_else(|| String::from("No Profile is active. Add and select a Profile first."))?;
         let path = self
-            .ensure_current_profile_runtime(profile_host, app_config_store)
+            .ensure_profile_runtime(&current, profile_host, app_config_store)
             .await?;
         let source = path.display().to_string();
-        match singbox_host.start(&source, &self.state.gui_config).await {
+        match singbox_host
+            .start(&source, &self.state.gui_config, current.hook.as_deref())
+            .await
+        {
             Ok(launch_config) => {
                 self.state.kernel.controller_addr = launch_config.external_controller;
                 self.state.kernel.controller_secret = launch_config.secret;
@@ -527,19 +534,6 @@ impl AppController {
             .iter()
             .find(|profile| profile.id == id)
             .ok_or_else(|| String::from("Specified Profile was not found."))
-    }
-
-    async fn ensure_current_profile_runtime(
-        &mut self,
-        profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
-    ) -> Result<std::path::PathBuf, String> {
-        let current = self
-            .current_profile()
-            .cloned()
-            .ok_or_else(|| String::from("No Profile is active. Add and select a Profile first."))?;
-        self.ensure_profile_runtime(&current, profile_host, app_config_store)
-            .await
     }
 
     async fn ensure_profile_runtime(

@@ -11,7 +11,11 @@ import { i18n } from '@/i18n';
 
 defineOptions({ name: 'ProfileEditPage' });
 
-const EMPTY_PROFILE_HOOK_TEMPLATE = `export function beforeCreate(input) {
+const EMPTY_PROFILE_HOOK_TEMPLATE = `export function onGenerate(input) {
+  return input.singbox;
+}
+
+export function onFinalize(input) {
   return input.singbox;
 }
 `;

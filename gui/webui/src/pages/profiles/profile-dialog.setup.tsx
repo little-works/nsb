@@ -521,11 +521,18 @@ export default __render<ProfileDialogProps>(() => {
                           {t('profiles.dialog.hookHelpTitle')}
                         </p>
                         <p class="mt-1 text-xs leading-5 text-on-surface-variant">
-                          {t('profiles.dialog.hookHelpIntro')}
+                          {t('profiles.dialog.hookGenerateIntro')}
                           <code class="rounded bg-surface-container px-1 font-mono text-on-surface">
-                            {t('profiles.dialog.hookFunction')}
+                            {t('profiles.dialog.hookGenerateFunction')}
                           </code>
-                          {t('profiles.dialog.hookHelpReturns')}
+                          {t('profiles.dialog.hookGenerateReturns')}
+                        </p>
+                        <p class="mt-1 text-xs leading-5 text-on-surface-variant">
+                          {t('profiles.dialog.hookFinalizeIntro')}
+                          <code class="rounded bg-surface-container px-1 font-mono text-on-surface">
+                            {t('profiles.dialog.hookFinalizeFunction')}
+                          </code>
+                          {t('profiles.dialog.hookFinalizeReturns')}
                         </p>
                       </div>
                       <div class="text-xs leading-5 text-on-surface-variant">
@@ -533,7 +540,7 @@ export default __render<ProfileDialogProps>(() => {
                           <code class="font-mono text-on-surface">
                             {t('profiles.dialog.hookSingbox')}
                           </code>
-                          {t('profiles.dialog.hookHelpSingbox')}
+                          {t('profiles.dialog.hookFinalizeSingbox')}
                         </p>
                         <p>
                           {t('profiles.dialog.hookHelpSingle')}
