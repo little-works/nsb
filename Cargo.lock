@@ -1655,9 +1655,12 @@ dependencies = [
 name = "nsb-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "rquickjs",
  "serde",
  "serde_json",
  "serde_with",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -1677,10 +1680,8 @@ dependencies = [
  "open",
  "rand",
  "reqwest",
- "rquickjs",
  "serde",
  "serde_json",
- "serde_yaml",
  "tao",
  "time",
  "tokio",

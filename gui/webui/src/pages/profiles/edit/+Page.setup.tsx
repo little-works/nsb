@@ -1,10 +1,28 @@
 import { __render } from '@/shared/helpter';
 import { createProfile, updateProfile } from '@/api/client';
+import { Button } from '@/components/button';
+import { Icon } from '@/components/icon';
 import { toast } from '@/components/toast';
 import ProfileDialog from '@/pages/profiles/profile-dialog.setup';
+import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
 import { useAppSnapshot } from '@/store/app';
-import type { ProfileHeader, ProfileRemote } from '@/types';
-import { computed, ref, watchEffect } from 'vue';
+import { useFloatingDockStore } from '@/store/floating-dock';
+import type { ProfileRemote } from '@/types';
+import {
+  CodeOutlined,
+  EditOutlined,
+  LinkOutlined,
+  ScheduleOutlined,
+} from '@vicons/material';
+import {
+  computed,
+  onActivated,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  ref,
+  watchEffect,
+} from 'vue';
 import { usePageContext } from 'vike-vue/usePageContext';
 import { navigate } from 'vike/client/router';
 import { i18n } from '@/i18n';
@@ -21,6 +39,7 @@ export function onFinalize(input) {
 `;
 
 const appSnapshot = useAppSnapshot();
+const floatingDockStore = useFloatingDockStore();
 const pageContext = usePageContext();
 const profileId = new URL(
   pageContext.urlOriginal,
@@ -31,8 +50,11 @@ const saving = ref(false);
 const name = ref('');
 const remotes = ref<ProfileRemote[]>([{ name: '', url: '', headers: [] }]);
 const hook = ref(EMPTY_PROFILE_HOOK_TEMPLATE);
+const keepSubscriptionGroupsAndRules = ref(false);
 const interval = ref('');
 const cron = ref('');
+let unregisterDockContent: (() => void) | null = null;
+let profileEditDockActive = false;
 
 const profile = computed(() =>
   (appSnapshot.data.value?.state.gui_config.profiles ?? []).find(
@@ -49,6 +71,8 @@ watchEffect(() => {
       : [{ name: '', url: profile.value.url, headers: profile.value.headers }]
   ).map((remote) => ({ ...remote, headers: [...remote.headers] }));
   hook.value = profile.value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
+  keepSubscriptionGroupsAndRules.value =
+    profile.value.keep_subscription_groups_and_rules;
   interval.value = profile.value.update_interval_hours?.toString() ?? '';
   cron.value = profile.value.update_cron ?? '';
   initialized.value = true;
@@ -57,6 +81,89 @@ watchEffect(() => {
 function close() {
   void navigate('/webui/profiles');
 }
+
+function scrollToSection(id: string) {
+  document
+    .getElementById(id)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function activateProfileEditDock() {
+  if (profileEditDockActive) {
+    return;
+  }
+
+  profileEditDockActive = true;
+  unregisterDockContent = floatingDockStore.register(() => (
+    <>
+      <Button
+        aria-label={i18n.global.t('profiles.dialog.basicConfiguration')}
+        iconOnly
+        shape="square"
+        size="sm"
+        tooltip={i18n.global.t('profiles.dialog.basicConfiguration')}
+        variant="ghost"
+        onClick={() =>
+          scrollToSection(PROFILE_EDIT_SECTION_IDS.basicConfiguration)
+        }
+      >
+        <Icon class="text-base">
+          <EditOutlined />
+        </Icon>
+      </Button>
+      <Button
+        aria-label={i18n.global.t('profiles.dialog.remoteSources')}
+        iconOnly
+        shape="square"
+        size="sm"
+        tooltip={i18n.global.t('profiles.dialog.remoteSources')}
+        variant="ghost"
+        onClick={() => scrollToSection(PROFILE_EDIT_SECTION_IDS.remoteSources)}
+      >
+        <Icon class="text-base">
+          <LinkOutlined />
+        </Icon>
+      </Button>
+      <Button
+        aria-label={i18n.global.t('profiles.dialog.updateSchedule')}
+        iconOnly
+        shape="square"
+        size="sm"
+        tooltip={i18n.global.t('profiles.dialog.updateSchedule')}
+        variant="ghost"
+        onClick={() => scrollToSection(PROFILE_EDIT_SECTION_IDS.updateSchedule)}
+      >
+        <Icon class="text-base">
+          <ScheduleOutlined />
+        </Icon>
+      </Button>
+      <Button
+        aria-label={i18n.global.t('profiles.dialog.customHook')}
+        iconOnly
+        shape="square"
+        size="sm"
+        tooltip={i18n.global.t('profiles.dialog.customHook')}
+        variant="ghost"
+        onClick={() => scrollToSection(PROFILE_EDIT_SECTION_IDS.customHook)}
+      >
+        <Icon class="text-base">
+          <CodeOutlined />
+        </Icon>
+      </Button>
+    </>
+  ));
+}
+
+function deactivateProfileEditDock() {
+  profileEditDockActive = false;
+  unregisterDockContent?.();
+  unregisterDockContent = null;
+}
+
+onMounted(activateProfileEditDock);
+onActivated(activateProfileEditDock);
+onDeactivated(deactivateProfileEditDock);
+onBeforeUnmount(deactivateProfileEditDock);
 
 async function submit() {
   saving.value = true;
@@ -68,6 +175,7 @@ async function submit() {
       headers: remotes.value[0]?.headers ?? [],
       remotes: remotes.value.filter((remote) => remote.url.trim()),
       hook: hook.value.trim() || null,
+      keep_subscription_groups_and_rules: keepSubscriptionGroupsAndRules.value,
       update_interval_hours: interval.value ? Number(interval.value) : null,
       update_cron: cron.value.trim() || null,
     };
@@ -99,6 +207,7 @@ export default __render(() => (
     headers={[]}
     remotes={remotes.value}
     hook={hook.value}
+    keepSubscriptionGroupsAndRules={keepSubscriptionGroupsAndRules.value}
     updateIntervalHours={interval.value}
     updateCron={cron.value}
     submitLabel={profileId ? 'Save Changes' : 'Add Profile'}
@@ -113,6 +222,9 @@ export default __render(() => (
     }}
     onHookInput={(value) => {
       hook.value = value;
+    }}
+    onKeepSubscriptionGroupsAndRulesChange={(value) => {
+      keepSubscriptionGroupsAndRules.value = value;
     }}
     onAddHeader={() => {}}
     onHeaderChange={() => {}}

@@ -6,7 +6,7 @@ env = { NSB_WEBUI_PORT = "3100" }
 run = { tasks = ["dev-desktop", "dev-webui"] }
 
 [tasks.dev-desktop]
-run = "watchexec -w ./gui/src -e rs -i target --shell=none -r -- cargo run -p nsb-gui"
+run = "watchexec -w ./gui/src -w ./core/src -e rs -i target --shell=none -r -- cargo run -p nsb-gui"
 
 [tasks.dev-webui]
 run = "cd gui/webui && pnpm run dev"

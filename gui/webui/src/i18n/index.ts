@@ -167,6 +167,7 @@ const enUS = {
       createTitle: 'Create Profile',
       subtitle:
         'Configure remote subscriptions, update schedules, and custom generation hooks.',
+      basicConfiguration: 'Basic Configuration',
       profileName: 'Profile Name',
       name: 'Name',
       nameDesc:
@@ -189,6 +190,9 @@ const enUS = {
       headerKeyPlaceholder: 'User-Agent',
       removeHeader: 'Remove Header',
       noHeaders: 'No custom request headers.',
+      keepSubscriptionGroupsAndRules: 'Keep source groups and routing rules',
+      keepSubscriptionGroupsAndRulesDesc:
+        'Include subscription-defined proxy groups and routing rules in the generated configuration.',
       updateSchedule: 'Update Schedule',
       updateInterval: 'Update Interval (hours)',
       updateIntervalDesc:
@@ -220,8 +224,6 @@ const enUS = {
       hookRemote: 'remote',
       hookRemotes: 'remotes',
       hookSingbox: 'singbox',
-      hookExampleCode:
-        "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
     },
     editNodes: 'Edit nodes',
     delete: 'Delete profile',
@@ -431,6 +433,7 @@ const zhCN = {
       editTitle: '编辑配置',
       createTitle: '新建配置',
       subtitle: '配置远程订阅、更新计划与自定义生成钩子。',
+      basicConfiguration: '基本配置',
       profileName: '配置名称',
       name: '名称',
       nameDesc: '用于在配置列表中识别这组订阅。',
@@ -451,6 +454,9 @@ const zhCN = {
       headerKeyPlaceholder: 'User-Agent',
       removeHeader: '删除请求头',
       noHeaders: '无自定义请求头。',
+      keepSubscriptionGroupsAndRules: '保留订阅源分组和路由规则',
+      keepSubscriptionGroupsAndRulesDesc:
+        '将订阅中定义的代理分组和路由规则写入生成的配置。',
       updateSchedule: '更新计划',
       updateInterval: '更新间隔（小时）',
       updateIntervalDesc: '留空则不按间隔自动更新。',
@@ -476,8 +482,6 @@ const zhCN = {
       hookRemote: 'remote',
       hookRemotes: 'remotes',
       hookSingbox: 'singbox',
-      hookExampleCode:
-        "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';",
     },
     editNodes: '编辑节点',
     delete: '删除配置',

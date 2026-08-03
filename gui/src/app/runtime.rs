@@ -7,6 +7,7 @@ use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::KernelStatus;
 use crate::state::ProfileHeader;
+use nsb_core::{RemoteSource, build_config, parse_remote};
 use tokio::sync::Mutex;
 
 pub type SharedGuiRuntime = Arc<Mutex<GuiRuntime>>;
@@ -288,11 +289,18 @@ pub async fn update_profile_runtime(
                     .await
                 {
                     Ok(content) => {
-                        let snapshot = crate::app::profile_builder::parse_remote(
-                            remote,
+                        let snapshot = parse_remote(
+                            &RemoteSource {
+                                name: remote.name.clone(),
+                                url: remote.url.clone(),
+                            },
                             &content,
                             multi_remote,
+                            profile.keep_subscription_groups_and_rules,
                         )?;
+                        for warning in &snapshot.warnings {
+                            log::warn!("{warning}");
+                        }
                         profile_host
                             .save_remote_raw(&profile.id, &remote.name, &content)
                             .await?;
@@ -320,18 +328,26 @@ pub async fn update_profile_runtime(
                                 remote.name
                             ));
                         };
-                        crate::app::profile_builder::parse_remote(remote, &cached, multi_remote)
-                            .map_err(|err| {
-                                format!(
-                                    "Failed to parse raw cache for Remote {}: {err}",
-                                    remote.name
-                                )
-                            })?
+                        parse_remote(
+                            &RemoteSource {
+                                name: remote.name.clone(),
+                                url: remote.url.clone(),
+                            },
+                            &cached,
+                            multi_remote,
+                            profile.keep_subscription_groups_and_rules,
+                        )
+                        .map_err(|err| {
+                            format!(
+                                "Failed to parse raw cache for Remote {}: {err}",
+                                remote.name
+                            )
+                        })?
                     }
                 };
                 snapshots.push(snapshot);
             }
-            crate::app::profile_builder::build_config(snapshots, profile.hook.as_deref()).map_err(
+            build_config(snapshots, profile.hook.as_deref()).map_err(
                 |error| {
                     log::error!(
                         "Failed to generate Profile runtime configuration: profile_id={} remotes={} error={error}",
@@ -388,10 +404,7 @@ pub async fn update_profile_runtime(
                 .save(&guard.controller.state.gui_config)
                 .await?;
 
-            if restart_current_kernel
-                && is_current
-                && guard.controller.state.kernel.status == KernelStatus::Running
-            {
+            if restart_current_kernel && is_current {
                 let GuiRuntime {
                     controller,
                     singbox_host,
@@ -399,7 +412,15 @@ pub async fn update_profile_runtime(
                     app_config_store,
                     ..
                 } = &mut *guard;
-                controller.stop_kernel(singbox_host).await?;
+
+                // Refresh is explicitly asked to apply the active Profile to the
+                // core. The status may be stale when the core exited between UI
+                // snapshots, so synchronize it before deciding whether a stop is
+                // needed. `start_kernel` then either restarts a live core or starts
+                // the active Profile from its newly persisted runtime config.
+                if controller.snapshot(singbox_host).await.kernel_running {
+                    controller.stop_kernel(singbox_host).await?;
+                }
                 controller
                     .start_kernel(singbox_host, profile_host, app_config_store)
                     .await?;

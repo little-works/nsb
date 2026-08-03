@@ -51,6 +51,8 @@ pub struct CreateProfileRequest {
     remotes: Vec<ProfileRemote>,
     #[serde(default)]
     hook: Option<String>,
+    #[serde(default)]
+    keep_subscription_groups_and_rules: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +71,8 @@ pub struct UpdateProfileRequest {
     remotes: Vec<ProfileRemote>,
     #[serde(default)]
     hook: Option<String>,
+    #[serde(default)]
+    keep_subscription_groups_and_rules: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,7 +108,9 @@ pub async fn refresh_profile(State(ctx): State<RouteState>) -> Json<ApiResponse<
         ));
     };
 
-    match update_profile_runtime(ctx.runtime.clone(), profile_id, false).await {
+    // The refreshed runtime is the source for the active kernel. Apply it so the
+    // workspace config is regenerated and the core is running after refresh.
+    match update_profile_runtime(ctx.runtime.clone(), profile_id, true).await {
         Ok(()) => {
             let mut guard = ctx.runtime.lock().await;
             let snapshot = guard.snapshot().await;
@@ -125,7 +131,10 @@ pub async fn refresh_profile_by_id(
     Path(id): Path<String>,
     State(ctx): State<RouteState>,
 ) -> Json<ApiResponse<AppSnapshot>> {
-    match update_profile_runtime(ctx.runtime.clone(), id, false).await {
+    // `update_profile_runtime` applies the refreshed runtime only when this Profile
+    // is active, so refreshing an inactive Profile remains side-effect free for the
+    // kernel.
+    match update_profile_runtime(ctx.runtime.clone(), id, true).await {
         Ok(()) => {
             let mut guard = ctx.runtime.lock().await;
             let snapshot = guard.snapshot().await;
@@ -253,7 +262,13 @@ pub async fn create_profile(
                         ..
                     } = &mut *guard;
                     if let Err(err) = controller
-                        .configure_profile_sources(&created.id, remotes, hook, app_config_store)
+                        .configure_profile_sources(
+                            &created.id,
+                            remotes,
+                            hook,
+                            request.keep_subscription_groups_and_rules,
+                            app_config_store,
+                        )
                         .await
                     {
                         return Json(ApiResponse::failure(
@@ -354,7 +369,13 @@ pub async fn update_profile(
                 ..
             } = &mut *guard;
             if let Err(err) = controller
-                .configure_profile_sources(&id, remotes, hook, app_config_store)
+                .configure_profile_sources(
+                    &id,
+                    remotes,
+                    hook,
+                    request.keep_subscription_groups_and_rules,
+                    app_config_store,
+                )
                 .await
             {
                 return Json(ApiResponse::failure(

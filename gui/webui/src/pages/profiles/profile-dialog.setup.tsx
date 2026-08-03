@@ -4,6 +4,7 @@ import { Icon } from '@/components/icon';
 import { Page, PageContent } from '@/components/page-content';
 import { CodeEditor } from '@/components/code-editor';
 import { Popover } from '@/components/popover';
+import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
 import type { ProfileHeader } from '@/types';
 import type { ProfileRemote } from '@/types';
 import { useMounted } from '@vueuse/core';
@@ -21,6 +22,9 @@ import {
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+const HOOK_EXAMPLE_CODE =
+  "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';";
+
 export interface ProfileDialogProps {
   open: boolean;
   editing: boolean;
@@ -29,6 +33,7 @@ export interface ProfileDialogProps {
   headers: ProfileHeader[];
   remotes: ProfileRemote[];
   hook: string;
+  keepSubscriptionGroupsAndRules: boolean;
   updateIntervalHours: string;
   updateCron: string;
   submitLabel: string;
@@ -38,6 +43,7 @@ export interface ProfileDialogProps {
   onSourceInput: (value: string) => void;
   onRemotesChange: (value: ProfileRemote[]) => void;
   onHookInput: (value: string) => void;
+  onKeepSubscriptionGroupsAndRulesChange: (value: boolean) => void;
   onAddHeader: () => void;
   onHeaderChange: (
     index: number,
@@ -152,13 +158,16 @@ export default __render<ProfileDialogProps>(() => {
       subtitle={t('profiles.dialog.subtitle')}
     >
       <PageContent class="max-w-4xl pb-24 pt-4">
-        <section class="mb-10">
+        <section
+          id={PROFILE_EDIT_SECTION_IDS.basicConfiguration}
+          class="mb-10 scroll-mt-4"
+        >
           <div class="mb-3 flex items-center gap-2">
             <Icon class="text-xl text-primary">
               <EditOutlined />
             </Icon>
             <h3 class="text-lg font-bold leading-6 text-on-surface">
-              {t('profiles.dialog.profileName')}
+              {t('profiles.dialog.basicConfiguration')}
             </h3>
           </div>
           <div
@@ -188,10 +197,38 @@ export default __render<ProfileDialogProps>(() => {
                 placeholder={t('profiles.dialog.namePlaceholder')}
               />
             </label>
+            <label
+              class={[
+                'flex items-start gap-3 p-4',
+                'border-t border-outline-variant/50',
+              ]}
+            >
+              <input
+                class="mt-1 h-4 w-4 accent-primary"
+                type="checkbox"
+                checked={props.keepSubscriptionGroupsAndRules}
+                onChange={(event) =>
+                  props.onKeepSubscriptionGroupsAndRulesChange(
+                    (event.target as HTMLInputElement).checked,
+                  )
+                }
+              />
+              <span>
+                <span class="block text-sm font-medium text-on-surface">
+                  {t('profiles.dialog.keepSubscriptionGroupsAndRules')}
+                </span>
+                <span class="block text-sm text-on-surface-variant">
+                  {t('profiles.dialog.keepSubscriptionGroupsAndRulesDesc')}
+                </span>
+              </span>
+            </label>
           </div>
         </section>
 
-        <section class="mb-10">
+        <section
+          id={PROFILE_EDIT_SECTION_IDS.remoteSources}
+          class="mb-10 scroll-mt-4"
+        >
           <div class="mb-3 flex h-10 items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-2">
               <Icon class="text-xl text-primary">
@@ -427,7 +464,10 @@ export default __render<ProfileDialogProps>(() => {
           </div>
         </section>
 
-        <section class="mb-10">
+        <section
+          id={PROFILE_EDIT_SECTION_IDS.updateSchedule}
+          class="mb-10 scroll-mt-4"
+        >
           <div class="mb-3 flex items-center gap-2">
             <Icon class="text-xl text-primary">
               <ScheduleOutlined />
@@ -492,7 +532,10 @@ export default __render<ProfileDialogProps>(() => {
           </div>
         </section>
 
-        <section class="mb-10">
+        <section
+          id={PROFILE_EDIT_SECTION_IDS.customHook}
+          class="mb-10 scroll-mt-4"
+        >
           <div class="mb-3 flex items-center gap-2">
             <Icon class="text-xl text-primary">
               <CodeOutlined />
@@ -561,7 +604,7 @@ export default __render<ProfileDialogProps>(() => {
                           {t('profiles.dialog.hookExample')}
                         </p>
                         <pre class="overflow-x-auto rounded bg-surface-container p-2 font-mono text-xs leading-5 text-on-surface">
-                          {t('profiles.dialog.hookExampleCode')}
+                          {HOOK_EXAMPLE_CODE}
                         </pre>
                       </div>
                     </div>

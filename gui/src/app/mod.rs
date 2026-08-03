@@ -1,5 +1,4 @@
 mod controller;
-pub(crate) mod profile_builder;
 mod runtime;
 
 use std::sync::Arc;

@@ -12,7 +12,7 @@ use std::{
 use std::os::windows::process::CommandExt;
 
 use log::info;
-use nsb_core::{ClashApi, Experimental, Inbound, Log, SingBoxConfig};
+use nsb_core::{ClashApi, Experimental, Inbound, Log, SingBoxConfig, run_finalize_hook};
 use serde::{Deserialize, Serialize};
 use tokio::fs as tokio_fs;
 
@@ -23,7 +23,6 @@ use windows_sys::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::app::profile_builder::run_finalize_hook;
 use crate::config::AppConfig;
 use crate::utils::command::command;
 use crate::utils::path::ensure_data_dir;

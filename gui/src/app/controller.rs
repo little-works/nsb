@@ -185,6 +185,7 @@ impl AppController {
             headers,
             remotes: Vec::new(),
             hook: None,
+            keep_subscription_groups_and_rules: false,
             update_interval_hours,
             update_cron,
             next_update_at,
@@ -298,6 +299,7 @@ impl AppController {
         id: &str,
         remotes: Vec<ProfileRemote>,
         hook: Option<String>,
+        keep_subscription_groups_and_rules: bool,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         for remote in &remotes {
@@ -335,6 +337,7 @@ impl AppController {
         target.hook = hook
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
+        target.keep_subscription_groups_and_rules = keep_subscription_groups_and_rules;
         target.revision = target.revision.saturating_add(1);
         app_config_store.save(&self.state.gui_config).await
     }

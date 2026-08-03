@@ -83,6 +83,8 @@ pub struct ProfileItem {
     #[serde(default)]
     pub hook: Option<String>,
     #[serde(default)]
+    pub keep_subscription_groups_and_rules: bool,
+    #[serde(default)]
     pub update_interval_hours: Option<u32>,
     #[serde(default)]
     pub update_cron: Option<String>,
@@ -212,14 +214,30 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::generate_profile_id;
+    use super::{ProfileItem, generate_profile_id};
 
     #[test]
     fn generates_eight_character_lowercase_alphanumeric_profile_ids() {
         let id = generate_profile_id();
         assert_eq!(id.len(), 8);
-        assert!(id
-            .bytes()
-            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit()));
+        assert!(
+            id.bytes()
+                .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+        );
+    }
+
+    #[test]
+    fn defaults_and_serializes_subscription_groups_and_rules_setting() {
+        let mut profile: ProfileItem = serde_json::from_value(serde_json::json!({
+            "name": "Profile",
+            "kind": "URL",
+            "url": "https://example.com/subscription"
+        }))
+        .unwrap();
+        assert!(!profile.keep_subscription_groups_and_rules);
+
+        profile.keep_subscription_groups_and_rules = true;
+        let serialized = serde_json::to_value(profile).unwrap();
+        assert_eq!(serialized["keep_subscription_groups_and_rules"], true);
     }
 }

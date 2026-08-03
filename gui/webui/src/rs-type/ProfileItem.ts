@@ -12,6 +12,7 @@ export type ProfileItem = {
   headers: Array<ProfileHeader>;
   remotes: Array<ProfileRemote>;
   hook: string | null;
+  keep_subscription_groups_and_rules: boolean;
   update_interval_hours: number | null;
   update_cron: string | null;
   next_update_at: number;
