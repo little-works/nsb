@@ -1,12 +1,12 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
 use crate::config::AppConfig;
 
-static PROFILE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+const PROFILE_ID_LENGTH: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum KernelStatus {
@@ -164,12 +164,17 @@ pub fn current_timestamp() -> u64 {
 }
 
 pub fn generate_profile_id() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let counter = PROFILE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("profile-{nanos:032x}-{counter:08x}")
+    let mut rng = rand::rng();
+    (0..PROFILE_ID_LENGTH)
+        .map(|_| {
+            let index = rng.random_range(0..36);
+            if index < 10 {
+                char::from(b'0' + index as u8)
+            } else {
+                char::from(b'a' + (index - 10) as u8)
+            }
+        })
+        .collect()
 }
 
 fn deserialize_profile_id<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -203,4 +208,18 @@ where
         Some(TimestampValue::Text(value)) => value.trim().parse::<u64>().unwrap_or(0),
         None => 0,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_profile_id;
+
+    #[test]
+    fn generates_eight_character_lowercase_alphanumeric_profile_ids() {
+        let id = generate_profile_id();
+        assert_eq!(id.len(), 8);
+        assert!(id
+            .bytes()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit()));
+    }
 }

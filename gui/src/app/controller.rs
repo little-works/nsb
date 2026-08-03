@@ -163,7 +163,7 @@ impl AppController {
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         let name = Self::validate_profile_name(name)?;
-        let id = generate_profile_id();
+        let id = self.next_profile_id();
         Self::validate_headers(&headers)?;
         Self::validate_schedule(update_interval_hours, update_cron.as_deref())?;
         let prepared = Self::prepare_profile(None, source, content)?;
@@ -592,6 +592,21 @@ impl AppController {
             .profiles
             .first()
             .map(|profile| profile.id.clone());
+    }
+
+    fn next_profile_id(&self) -> String {
+        loop {
+            let id = generate_profile_id();
+            if !self
+                .state
+                .gui_config
+                .profiles
+                .iter()
+                .any(|profile| profile.id == id)
+            {
+                return id;
+            }
+        }
     }
 
     fn validate_profile_name(name: String) -> Result<String, String> {

@@ -1675,6 +1675,7 @@ dependencies = [
  "log",
  "nsb-core",
  "open",
+ "rand",
  "reqwest",
  "rquickjs",
  "serde",
