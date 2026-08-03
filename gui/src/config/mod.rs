@@ -74,7 +74,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            mixed_port: 7990,
+            mixed_port: default_mixed_port(),
             allow_lan: false,
             app_port: default_app_port(),
             system_proxy_enabled: false,
@@ -86,7 +86,19 @@ impl Default for AppConfig {
 }
 
 fn default_app_port() -> u16 {
-    8787
+    if cfg!(debug_assertions) {
+        18787
+    } else {
+        8787
+    }
+}
+
+fn default_mixed_port() -> u16 {
+    if cfg!(debug_assertions) {
+        17990
+    } else {
+        7990
+    }
 }
 
 pub struct AppConfigStore {
