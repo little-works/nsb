@@ -8,7 +8,12 @@ import { useI18n } from 'vue-i18n';
 import { i18n } from '@/i18n';
 
 type JsonValue =
-  boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 type JsonPathSegment = number | string;
 
 interface NavigationEntry {
@@ -170,15 +175,19 @@ function jsonErrorMessage(error: unknown) {
 }
 
 function formatPathSegment(segment: JsonPathSegment, path: JsonPathSegment[]) {
-  if (
-    path.length === 2 &&
-    path[0] === 'outbounds' &&
-    typeof segment === 'number' &&
-    rootValue.value !== undefined
-  ) {
-    const outbound = getValueAtPath(rootValue.value, path);
-    if (isJsonObject(outbound) && typeof outbound.tag === 'string') {
-      return `[${segment}].${outbound.tag}`;
+  if (typeof segment === 'number' && rootValue.value !== undefined) {
+    if (path.length === 2 && path[0] === 'outbounds') {
+      const outbound = getValueAtPath(rootValue.value, path);
+      if (isJsonObject(outbound) && typeof outbound.tag === 'string') {
+        return `[${segment}].${outbound.tag}`;
+      }
+    }
+
+    if (path.length === 3 && path[0] === 'route' && path[1] === 'rules') {
+      const rule = getValueAtPath(rootValue.value, path);
+      if (isJsonObject(rule) && typeof rule.outbound === 'string') {
+        return `[${segment}].${rule.outbound}`;
+      }
     }
   }
 
