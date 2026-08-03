@@ -41,11 +41,11 @@ impl ProfileHost {
 
     pub async fn delete_runtime(&self, id: &str) -> Result<(), String> {
         let path = self.runtime_path(id);
-        self.remove_runtime_if_exists(&path).await?;
+        self.remove_cache_path_if_exists(&path).await?;
 
         let legacy_path = self.legacy_runtime_path(id);
         if legacy_path != path {
-            self.remove_runtime_if_exists(&legacy_path).await?;
+            self.remove_cache_path_if_exists(&legacy_path).await?;
         }
 
         Ok(())
@@ -140,10 +140,17 @@ impl ProfileHost {
         }
 
         let legacy_path = self.legacy_runtime_path(id);
-        if !fs::try_exists(&legacy_path)
-            .await
-            .map_err(|err| format!("Failed to check Profile cache: {}: {err}", legacy_path.display()))?
-        {
+        let metadata = match fs::symlink_metadata(&legacy_path).await {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(format!(
+                    "Failed to check Profile cache: {}: {err}",
+                    legacy_path.display()
+                ));
+            }
+        };
+        if !metadata.file_type().is_file() {
             return Ok(());
         }
 
@@ -170,16 +177,26 @@ impl ProfileHost {
         self.runtime_dir().join(id)
     }
 
-    async fn remove_runtime_if_exists(&self, path: &Path) -> Result<(), String> {
-        if !fs::try_exists(path)
-            .await
-            .map_err(|err| format!("Failed to check Profile cache: {}: {err}", path.display()))?
-        {
-            return Ok(());
-        }
+    async fn remove_cache_path_if_exists(&self, path: &Path) -> Result<(), String> {
+        let metadata = match fs::symlink_metadata(path).await {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(format!(
+                    "Failed to check Profile cache: {}: {err}",
+                    path.display()
+                ));
+            }
+        };
 
-        fs::remove_file(path)
-            .await
-            .map_err(|err| format!("Failed to delete Profile cache: {}: {err}", path.display()))
+        if metadata.file_type().is_dir() {
+            fs::remove_dir_all(path).await.map_err(|err| {
+                format!("Failed to delete Profile cache directory: {}: {err}", path.display())
+            })
+        } else {
+            fs::remove_file(path)
+                .await
+                .map_err(|err| format!("Failed to delete Profile cache: {}: {err}", path.display()))
+        }
     }
 }

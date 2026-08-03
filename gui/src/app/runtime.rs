@@ -131,7 +131,12 @@ impl GuiRuntime {
 
     pub async fn delete_profile(&mut self, id: String) -> Result<(), String> {
         self.controller
-            .delete_profile(id, &self.profile_host, &self.app_config_store)
+            .delete_profile(
+                id,
+                &mut self.singbox_host,
+                &self.profile_host,
+                &self.app_config_store,
+            )
             .await
     }
 

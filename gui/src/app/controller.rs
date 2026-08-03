@@ -255,6 +255,7 @@ impl AppController {
     pub async fn delete_profile(
         &mut self,
         id: String,
+        singbox_host: &mut SingBoxHost,
         profile_host: &ProfileHost,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
@@ -273,11 +274,20 @@ impl AppController {
             return Err(String::from("Profile to delete was not found."));
         };
 
-        let removed = self.state.gui_config.profiles.remove(index);
-        if self.state.gui_config.current_profile_id.as_deref() == Some(removed.id.as_str()) {
+        let removed = self.state.gui_config.profiles[index].clone();
+        let is_current =
+            self.state.gui_config.current_profile_id.as_deref() == Some(removed.id.as_str());
+        self.sync_kernel_runtime(singbox_host).await;
+        if is_current && self.state.kernel.status == crate::state::KernelStatus::Running {
+            self.stop_kernel(singbox_host).await?;
+        }
+
+        profile_host.delete_runtime(&removed.id).await?;
+
+        self.state.gui_config.profiles.remove(index);
+        if is_current {
             self.state.gui_config.current_profile_id = None;
         }
-        profile_host.delete_runtime(&removed.id).await?;
 
         self.normalize_current_profile();
         app_config_store.save(&self.state.gui_config).await
