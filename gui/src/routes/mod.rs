@@ -129,20 +129,25 @@ async fn access_log(request: Request, next: Next) -> Response {
     let trace_id = trace_context.0.clone();
     let method = request.method().clone();
     let url = request.uri().to_string();
+    let should_log = !request.uri().path().starts_with("/webui");
     let started_at = Instant::now();
     let mut request = request;
     request.extensions_mut().insert(trace_context);
 
-    info!("access started trace_id={trace_id} method={method} url={url}");
+    if should_log {
+        info!("access started trace_id={trace_id} method={method} url={url}");
+    }
     let response = REQUEST_TRACE_ID
         .scope(trace_id.clone(), next.run(request))
         .await;
 
-    info!(
-        "access completed trace_id={trace_id} status={} duration_ms={}",
-        response.status().as_u16(),
-        started_at.elapsed().as_millis(),
-    );
+    if should_log {
+        info!(
+            "access completed trace_id={trace_id} status={} duration_ms={}",
+            response.status().as_u16(),
+            started_at.elapsed().as_millis(),
+        );
+    }
 
     response
 }
