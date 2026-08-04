@@ -1,3 +1,5 @@
+import type { AppLanguage } from '@/rs-type/AppLanguage';
+
 export type RequestMethod =
   | 'GET'
   | 'POST'
