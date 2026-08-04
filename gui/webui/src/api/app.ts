@@ -10,6 +10,7 @@ import type {
 
 const request = new Request();
 const kernelDownloadRequest = new Request({ timeout: 300_000 });
+const profileActivationRequest = new Request({ timeout: 60_000 });
 
 export interface KernelReleaseInfo {
   version: string;
@@ -76,7 +77,9 @@ export function saveProfileContent(id: string, content: string) {
 }
 
 export function setCurrentProfile(id: string) {
-  return request.post<AppSnapshot>(`/api/profiles/${id}/activate`);
+  return profileActivationRequest.post<AppSnapshot>(
+    `/api/profiles/${id}/activate`,
+  );
 }
 
 export function refreshProfile() {

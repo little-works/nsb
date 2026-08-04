@@ -337,7 +337,7 @@ export default __render<ProfilesPageProps>(() => {
           </>
         ),
         default: () => (
-          <PageContent class="max-w-4xl space-y-4 pb-24 pt-4">
+          <PageContent class="space-y-4 pb-24 pt-4">
             <ProfilesTable
               profiles={profiles.value}
               currentProfileId={currentProfileId.value}

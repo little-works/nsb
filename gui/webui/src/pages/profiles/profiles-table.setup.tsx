@@ -60,7 +60,7 @@ export default __render<ProfilesTableProps>(() => {
           {t('profiles.empty')}
         </div>
       ) : (
-        <div class="flex flex-wrap gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {props.profiles.map((item) => {
             const isCurrent = item.id === props.currentProfileId;
             const hasAttempt = Boolean(item.last_attempt_at);
@@ -68,7 +68,7 @@ export default __render<ProfilesTableProps>(() => {
             return (
               <article
                 key={item.id}
-                class="flex w-full flex-col sm:max-w-sm
+                class="flex min-w-0 flex-col
                   rounded border border-outline-variant bg-surface-container-lowest p-3 shadow-sm
                   transition-shadow hover:shadow-md"
               >
