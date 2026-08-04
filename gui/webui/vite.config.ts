@@ -35,6 +35,7 @@ export default defineConfig({
   ],
   base: '/webui/',
   define: {
+    __VUE_PROD_DEVTOOLS__: false,
     __NSB_VERSION__: JSON.stringify(guiVersion),
   },
   resolve: {
@@ -48,6 +49,9 @@ export default defineConfig({
     proxy: {
       '/api': apiOrigin,
     },
+  },
+  ssr: {
+    noExternal: ['pinia', 'vike-vue-pinia'],
   },
   css: {
     modules: {},

@@ -8,7 +8,7 @@ export default {
   extends: [vikeVue, vikeVuePinia],
   title: 'NSB',
   description: 'NSB Desktop WebUI',
-  ssr: false,
+  ssr: true,
   prerender: true,
   htmlAttributes: {
     'data-nsb-theme': '$data_nsb_theme',
