@@ -1,9 +1,11 @@
 import { Request } from './request';
 
 import type {
-  AppSnapshot,
   AppLanguage,
   ProfileListResponse,
+  ProfileItem,
+  RuntimeStatus,
+  RuntimeSettings,
   SaveProfilePayload,
   SaveSettingsPayload,
 } from '@/types';
@@ -16,12 +18,12 @@ export interface KernelReleaseInfo {
   version: string;
 }
 
-export function fetchState() {
-  return request.get<AppSnapshot>('/api/state');
+export function fetchRuntime() {
+  return request.get<RuntimeStatus>('/api/runtime');
 }
 
 export function toggleKernel() {
-  return request.post<AppSnapshot>('/api/kernel/toggle');
+  return request.post<RuntimeStatus>('/api/kernel/toggle');
 }
 
 export function fetchKernelVersion() {
@@ -44,6 +46,10 @@ export async function importKernelBinary(file: File) {
 
 export function listProfiles() {
   return request.get<ProfileListResponse>('/api/profiles');
+}
+
+export function getProfile(id: string) {
+  return request.get<ProfileItem>(`/api/profiles/${id}`);
 }
 
 export function createProfile(payload: Omit<SaveProfilePayload, 'id'>) {
@@ -77,29 +83,29 @@ export function saveProfileContent(id: string, content: string) {
 }
 
 export function setCurrentProfile(id: string) {
-  return profileActivationRequest.post<AppSnapshot>(
+  return profileActivationRequest.post<ProfileListResponse>(
     `/api/profiles/${id}/activate`,
   );
 }
 
 export function refreshProfile() {
-  return request.post<AppSnapshot>('/api/profiles/refresh');
+  return request.post<ProfileListResponse>('/api/profiles/refresh');
 }
 
 export function refreshProfileById(id: string) {
-  return request.post<AppSnapshot>(`/api/profiles/${id}/refresh`);
-}
-
-export function saveProfile(payload: SaveProfilePayload) {
-  return request.post<AppSnapshot>('/api/profiles/save', payload);
+  return request.post<ProfileListResponse>(`/api/profiles/${id}/refresh`);
 }
 
 export function saveSettings(payload: SaveSettingsPayload) {
-  return request.post<AppSnapshot>('/api/settings', payload);
+  return request.post<RuntimeSettings>('/api/settings', payload);
+}
+
+export function fetchSettings() {
+  return request.get<RuntimeSettings>('/api/settings');
 }
 
 export function saveAppLanguage(appLanguage: AppLanguage) {
-  return request.post<AppSnapshot>('/api/settings/app-language', {
+  return request.post<RuntimeSettings>('/api/settings/app-language', {
     app_language: appLanguage,
   });
 }

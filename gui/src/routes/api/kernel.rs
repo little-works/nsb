@@ -10,9 +10,9 @@ use axum::Json;
 use axum::extract::{Multipart, State};
 use serde::{Deserialize, Serialize};
 
-use crate::app::AppSnapshot;
 use crate::hosts::SingBoxHost;
 use crate::routes::RouteState;
+use crate::state::KernelInfo;
 use crate::utils::command::std_command;
 
 use super::{ApiResponse, simple_response};
@@ -36,6 +36,23 @@ struct GithubReleaseAsset {
 #[derive(Clone, Serialize)]
 pub struct KernelReleaseInfo {
     version: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct RuntimeStatusResponse {
+    pub kernel: KernelInfo,
+}
+
+pub async fn get_runtime(
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<RuntimeStatusResponse>> {
+    let mut guard = ctx.runtime.lock().await;
+    guard.sync_runtime().await;
+    let kernel = guard.controller.state.kernel.clone();
+    Json(ApiResponse::success(
+        String::new(),
+        Some(RuntimeStatusResponse { kernel }),
+    ))
 }
 
 struct CachedKernelRelease {
@@ -78,11 +95,15 @@ pub async fn get_latest_kernel_release() -> Json<ApiResponse<KernelReleaseInfo>>
     }))
 }
 
-pub async fn toggle_kernel(State(ctx): State<RouteState>) -> Json<ApiResponse<AppSnapshot>> {
+pub async fn toggle_kernel(
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<RuntimeStatusResponse>> {
     let mut guard = ctx.runtime.lock().await;
     match guard.toggle_kernel().await {
         Ok(running) => {
-            let snapshot = guard.snapshot().await;
+            guard.sync_runtime().await;
+            let kernel = guard.controller.state.kernel.clone();
+            let snapshot = RuntimeStatusResponse { kernel };
             let message = if running {
                 String::from("Sing-box core started.")
             } else {
@@ -91,7 +112,9 @@ pub async fn toggle_kernel(State(ctx): State<RouteState>) -> Json<ApiResponse<Ap
             Json(ApiResponse::success(message, Some(snapshot)))
         }
         Err(err) => {
-            let snapshot = guard.snapshot().await;
+            guard.sync_runtime().await;
+            let kernel = guard.controller.state.kernel.clone();
+            let snapshot = RuntimeStatusResponse { kernel };
             Json(ApiResponse::failure(err, Some(snapshot)))
         }
     }

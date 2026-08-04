@@ -2,7 +2,7 @@ import { __render } from '@/shared/helpter';
 import { Button } from '@/components/button';
 import { CodeEditor } from '@/components/code-editor';
 import { Dialog } from '@/components/dialog';
-import type { ProfileItem } from '@/types';
+import type { ProfileSummary } from '@/types';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { i18n } from '@/i18n';
@@ -23,7 +23,7 @@ interface NavigationEntry {
 
 export interface ProfileNodeEditorProps {
   open: boolean;
-  profile: ProfileItem | null;
+  profile: ProfileSummary | null;
   content: string;
   loading: boolean;
   saving: boolean;

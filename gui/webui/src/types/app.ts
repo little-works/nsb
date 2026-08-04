@@ -19,8 +19,7 @@ export type { ProfileHeader } from '@/rs-type/ProfileHeader';
 export type { ProfileRemote } from '@/rs-type/ProfileRemote';
 export type { ProfileKind } from '@/rs-type/ProfileKind';
 export type { ProfileListResponse } from '@/rs-type/ProfileListResponse';
-
-import type { AppConfig as RsAppConfig } from '@/rs-type/AppConfig';
+export type { ProfileSummary } from '@/rs-type/ProfileSummary';
 
 export const AppPageType = {
   Proxies: 'Proxies',
@@ -42,14 +41,16 @@ export interface KernelInfo {
   last_started_at: string;
 }
 
-export interface AppState {
+export interface RuntimeStatus {
   kernel: KernelInfo;
-  gui_config: RsAppConfig;
 }
 
-export interface AppSnapshot {
-  state: AppState;
-  kernel_running: boolean;
+export interface RuntimeSettings {
+  mixed_port: number;
+  app_port: number;
+  allow_lan: boolean;
+  system_proxy_enabled: boolean;
+  app_language: AppLanguage;
 }
 
 export interface ApiResponse<T> {
@@ -72,6 +73,7 @@ export interface SaveProfilePayload {
     headers: Array<{ key: string; value: string }>;
   }>;
   hook?: string | null;
+  keep_subscription_groups_and_rules?: boolean;
 }
 
 export interface SaveSettingsPayload {

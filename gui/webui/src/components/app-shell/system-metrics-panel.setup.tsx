@@ -8,17 +8,18 @@ import {
   WarningAmberOutlined,
 } from '@vicons/material';
 import { Tooltip } from '@/components/tooltip';
-import { useAppSnapshot } from '@/store/app';
+import { useRuntimeSettings, useRuntimeStatus } from '@/store/app';
 import { useScoreStreamData } from '@/hooks/use-score-stream';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/icon';
 const { traffic } = useScoreStreamData();
-const appSnapshot = useAppSnapshot();
+const runtimeStatus = useRuntimeStatus();
+const runtimeSettings = useRuntimeSettings();
 const { t } = useI18n();
 const coreStatus = computed(() => {
-  const installed = appSnapshot.data.value?.state.kernel.installed ?? true;
-  const running = appSnapshot.data.value?.state.kernel.status === 'Running';
+  const installed = runtimeStatus.data.value?.kernel.installed ?? true;
+  const running = runtimeStatus.data.value?.kernel.status === 'Running';
   if (!installed) {
     return {
       icon: WarningAmberOutlined,
@@ -45,7 +46,7 @@ const coreStatus = computed(() => {
       };
 });
 const mixedPort = computed(() => {
-  const port = appSnapshot.data.value?.state.gui_config.mixed_port;
+  const port = runtimeSettings.data.value?.mixed_port;
   return port == null ? '--' : String(port);
 });
 

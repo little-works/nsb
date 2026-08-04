@@ -53,7 +53,7 @@ pub fn build_router(
         .route("/webui", get(webui::webui_entry))
         .route("/webui/", get(webui::webui_entry))
         .route("/webui/{*path}", get(webui::webui_asset))
-        .route("/api/state", get(api::state::get_state))
+        .route("/api/runtime", get(api::kernel::get_runtime))
         .route("/api/kernel/version", get(api::kernel::get_kernel_version))
         .route(
             "/api/kernel/latest",
@@ -83,6 +83,7 @@ pub fn build_router(
         .route("/api/score/logs/history", get(api::score::get_log_history))
         .route("/api/score/logs", post(api::score::clear_logs))
         .route("/api/profiles", get(api::profiles::list_profiles))
+        .route("/api/profiles/{id}", get(api::profiles::get_profile))
         .route("/api/profiles", post(api::profiles::create_profile))
         .route("/api/profiles/import", post(api::profiles::import_profile))
         .route(
@@ -103,8 +104,10 @@ pub fn build_router(
             "/api/profiles/refresh",
             post(api::profiles::refresh_profile),
         )
-        .route("/api/profiles/save", post(api::profiles::save_profile))
-        .route("/api/settings", post(api::settings::save_settings))
+        .route(
+            "/api/settings",
+            get(api::settings::get_settings).post(api::settings::save_settings),
+        )
         .route(
             "/api/settings/app-language",
             post(api::settings::save_app_language),

@@ -11,7 +11,6 @@ use tokio::sync::Mutex;
 use crate::config::AppLanguage;
 use crate::hosts::{ServerHost, TrayHost};
 
-pub use controller::AppSnapshot;
 pub use runtime::{GuiRuntime, SharedGuiRuntime, update_profile_runtime};
 
 #[derive(Debug, Clone)]

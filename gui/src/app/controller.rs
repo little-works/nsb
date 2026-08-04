@@ -1,5 +1,4 @@
 use log::{info, warn};
-use serde::Serialize;
 use std::str::FromStr;
 
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
@@ -15,12 +14,6 @@ const PROFILE_USER_AGENT: &str = concat!("ClashforWindows/0.20.16 NSB/", env!("C
 pub struct AppController {
     pub state: AppState,
     kernel_started_by_this_instance: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AppSnapshot {
-    pub state: AppState,
-    pub kernel_running: bool,
 }
 
 struct PreparedProfile {
@@ -71,12 +64,8 @@ impl AppController {
         self.sync_kernel_runtime(singbox_host).await;
     }
 
-    pub async fn snapshot(&mut self, singbox_host: &mut SingBoxHost) -> AppSnapshot {
+    pub async fn sync_runtime(&mut self, singbox_host: &mut SingBoxHost) {
         self.sync_kernel_runtime(singbox_host).await;
-        AppSnapshot {
-            state: self.state.clone(),
-            kernel_running: self.state.kernel.status == crate::state::KernelStatus::Running,
-        }
     }
 
     pub async fn start_kernel(
@@ -428,49 +417,6 @@ impl AppController {
         }
         self.start_kernel(singbox_host, profile_host, app_config_store)
             .await
-    }
-
-    pub async fn save_profile(
-        &mut self,
-        id: Option<String>,
-        name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
-        update_interval_hours: Option<u32>,
-        update_cron: Option<String>,
-        profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
-    ) -> Result<(), String> {
-        match id {
-            Some(id) if !id.trim().is_empty() => {
-                self.update_profile(
-                    id,
-                    name,
-                    source,
-                    content,
-                    headers,
-                    update_interval_hours,
-                    update_cron,
-                    profile_host,
-                    app_config_store,
-                )
-                .await
-            }
-            _ => {
-                self.create_profile(
-                    name,
-                    source,
-                    content,
-                    headers,
-                    update_interval_hours,
-                    update_cron,
-                    profile_host,
-                    app_config_store,
-                )
-                .await
-            }
-        }
     }
 
     pub async fn save_runtime_settings(

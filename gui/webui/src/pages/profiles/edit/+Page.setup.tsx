@@ -1,11 +1,12 @@
 import { __render } from '@/shared/helpter';
-import { createProfile, updateProfile } from '@/api/client';
+import { createProfile, getProfile, updateProfile } from '@/api/client';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { toast } from '@/components/toast';
 import ProfileDialog from '@/pages/profiles/profile-dialog.setup';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
-import { useAppSnapshot } from '@/store/app';
+import { useProfiles, useRuntimeStatus } from '@/store/app';
+import { useClientQuery } from '@/hooks/use-client-query';
 import { useFloatingDockStore } from '@/store/floating-dock';
 import type { ProfileRemote } from '@/types';
 import {
@@ -21,7 +22,7 @@ import {
   onDeactivated,
   onMounted,
   ref,
-  watchEffect,
+  watch,
 } from 'vue';
 import { usePageContext } from 'vike-vue/usePageContext';
 import { navigate } from 'vike/client/router';
@@ -38,13 +39,13 @@ export function onFinalize(input) {
 }
 `;
 
-const appSnapshot = useAppSnapshot();
+const profilesQuery = useProfiles();
+const runtimeStatus = useRuntimeStatus();
 const floatingDockStore = useFloatingDockStore();
 const pageContext = usePageContext();
-const profileId = new URL(
-  pageContext.urlOriginal,
-  'http://localhost',
-).searchParams.get('id');
+const profileId = computed(() =>
+  new URL(pageContext.urlOriginal, 'http://localhost').searchParams.get('id'),
+);
 const initialized = ref(false);
 const saving = ref(false);
 const name = ref('');
@@ -56,25 +57,53 @@ const cron = ref('');
 let unregisterDockContent: (() => void) | null = null;
 let profileEditDockActive = false;
 
-const profile = computed(() =>
-  (appSnapshot.data.value?.state.gui_config.profiles ?? []).find(
-    (item) => item.id === profileId,
-  ),
+const profileQuery = useClientQuery(
+  computed(() => ({
+    queryKey: ['profile', profileId.value],
+    enabled: Boolean(profileId.value),
+    queryFn: async () => {
+      const id = profileId.value;
+      if (!id) throw new Error(i18n.global.t('profiles.noneSelected'));
+      return getProfile(id);
+    },
+  })),
+);
+const profile = computed(() => {
+  const value = profileQuery.data.value;
+  return value?.id === profileId.value ? value : null;
+});
+
+function resetForm() {
+  name.value = '';
+  remotes.value = [{ name: '', url: '', headers: [] }];
+  hook.value = EMPTY_PROFILE_HOOK_TEMPLATE;
+  keepSubscriptionGroupsAndRules.value = false;
+  interval.value = '';
+  cron.value = '';
+}
+
+watch(
+  profileId,
+  () => {
+    initialized.value = false;
+    resetForm();
+  },
+  { immediate: true },
 );
 
-watchEffect(() => {
-  if (!profile.value || initialized.value) return;
-  name.value = profile.value.name;
+watch(profile, (value) => {
+  if (!value || initialized.value) return;
+  name.value = value.name;
   remotes.value = (
-    profile.value.remotes.length
-      ? profile.value.remotes
-      : [{ name: '', url: profile.value.url, headers: profile.value.headers }]
+    value.remotes.length
+      ? value.remotes
+      : [{ name: '', url: value.url, headers: value.headers }]
   ).map((remote) => ({ ...remote, headers: [...remote.headers] }));
-  hook.value = profile.value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
+  hook.value = value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
   keepSubscriptionGroupsAndRules.value =
-    profile.value.keep_subscription_groups_and_rules;
-  interval.value = profile.value.update_interval_hours?.toString() ?? '';
-  cron.value = profile.value.update_cron ?? '';
+    value.keep_subscription_groups_and_rules;
+  interval.value = value.update_interval_hours?.toString() ?? '';
+  cron.value = value.update_cron ?? '';
   initialized.value = true;
 });
 
@@ -166,6 +195,8 @@ onDeactivated(deactivateProfileEditDock);
 onBeforeUnmount(deactivateProfileEditDock);
 
 async function submit() {
+  const creatingFirstProfile =
+    !profileId.value && !profilesQuery.data.value?.current_profile_id;
   saving.value = true;
   try {
     const payload = {
@@ -179,11 +210,14 @@ async function submit() {
       update_interval_hours: interval.value ? Number(interval.value) : null,
       update_cron: cron.value.trim() || null,
     };
-    if (profileId) await updateProfile(profileId, payload);
+    if (profileId.value) await updateProfile(profileId.value, payload);
     else await createProfile(payload);
-    const result = await appSnapshot.refetch();
+    const result = await profilesQuery.refetch();
     if (!result.data) {
       throw new Error(i18n.global.t('profiles.loadFailed'));
+    }
+    if (creatingFirstProfile) {
+      await runtimeStatus.refetch();
     }
     close();
   } catch (error) {
@@ -201,7 +235,7 @@ async function submit() {
 export default __render(() => (
   <ProfileDialog
     open
-    editing={Boolean(profileId)}
+    editing={Boolean(profileId.value)}
     formName={name.value}
     formSource=""
     headers={[]}
@@ -210,7 +244,9 @@ export default __render(() => (
     keepSubscriptionGroupsAndRules={keepSubscriptionGroupsAndRules.value}
     updateIntervalHours={interval.value}
     updateCron={cron.value}
-    submitLabel={profileId ? 'Save Changes' : 'Add Profile'}
+    submitLabel={i18n.global.t(
+      profileId.value ? 'profiles.saveChanges' : 'profiles.add',
+    )}
     saving={saving.value}
     onClose={close}
     onNameInput={(value) => {

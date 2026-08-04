@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::app::{AppSnapshot, update_profile_runtime};
+use crate::app::update_profile_runtime;
 use crate::routes::RouteState;
 use crate::state::{ProfileHeader, ProfileItem, ProfileKind, ProfileRemote};
 
@@ -12,27 +12,32 @@ use super::ApiResponse;
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct ProfileListResponse {
-    pub profiles: Vec<ProfileItem>,
+    pub profiles: Vec<ProfileSummary>,
     pub current_profile_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SaveProfileRequest {
-    id: Option<String>,
-    name: String,
-    source: String,
-    #[serde(default)]
-    content: Option<String>,
-    #[serde(default)]
-    headers: Vec<ProfileHeader>,
-    #[serde(default)]
-    update_interval_hours: Option<u32>,
-    #[serde(default)]
-    update_cron: Option<String>,
-    #[serde(default)]
-    remotes: Vec<ProfileRemote>,
-    #[serde(default)]
-    hook: Option<String>,
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct ProfileSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: ProfileKind,
+    pub updated_at: u64,
+    pub last_attempt_at: u64,
+    pub last_update_failed: bool,
+}
+
+impl From<&ProfileItem> for ProfileSummary {
+    fn from(profile: &ProfileItem) -> Self {
+        Self {
+            id: profile.id.clone(),
+            name: profile.name.clone(),
+            kind: profile.kind.clone(),
+            updated_at: profile.updated_at,
+            last_attempt_at: profile.last_attempt_at,
+            last_update_failed: profile.last_update_error.is_some(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,7 +101,30 @@ pub async fn list_profiles(
     ))
 }
 
-pub async fn refresh_profile(State(ctx): State<RouteState>) -> Json<ApiResponse<AppSnapshot>> {
+pub async fn get_profile(
+    Path(id): Path<String>,
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<ProfileItem>> {
+    let guard = ctx.runtime.lock().await;
+    match guard
+        .controller
+        .state
+        .gui_config
+        .profiles
+        .iter()
+        .find(|profile| profile.id == id)
+    {
+        Some(profile) => Json(ApiResponse::success(String::new(), Some(profile.clone()))),
+        None => Json(ApiResponse::failure(
+            String::from("Specified Profile was not found."),
+            None,
+        )),
+    }
+}
+
+pub async fn refresh_profile(
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<ProfileListResponse>> {
     let current_profile_id = {
         let guard = ctx.runtime.lock().await;
         guard.controller.state.gui_config.current_profile_id.clone()
@@ -112,16 +140,16 @@ pub async fn refresh_profile(State(ctx): State<RouteState>) -> Json<ApiResponse<
     // workspace config is regenerated and the core is running after refresh.
     match update_profile_runtime(ctx.runtime.clone(), profile_id, true).await {
         Ok(()) => {
-            let mut guard = ctx.runtime.lock().await;
-            let snapshot = guard.snapshot().await;
+            let guard = ctx.runtime.lock().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::success(
                 String::from("Current Profile refreshed."),
                 Some(snapshot),
             ))
         }
         Err(err) => {
-            let mut guard = ctx.runtime.lock().await;
-            let snapshot = guard.snapshot().await;
+            let guard = ctx.runtime.lock().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::failure(err, Some(snapshot)))
         }
     }
@@ -130,22 +158,22 @@ pub async fn refresh_profile(State(ctx): State<RouteState>) -> Json<ApiResponse<
 pub async fn refresh_profile_by_id(
     Path(id): Path<String>,
     State(ctx): State<RouteState>,
-) -> Json<ApiResponse<AppSnapshot>> {
+) -> Json<ApiResponse<ProfileListResponse>> {
     // `update_profile_runtime` applies the refreshed runtime only when this Profile
     // is active, so refreshing an inactive Profile remains side-effect free for the
     // kernel.
     match update_profile_runtime(ctx.runtime.clone(), id, true).await {
         Ok(()) => {
-            let mut guard = ctx.runtime.lock().await;
-            let snapshot = guard.snapshot().await;
+            let guard = ctx.runtime.lock().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::success(
                 String::from("Profile refreshed."),
                 Some(snapshot),
             ))
         }
         Err(err) => {
-            let mut guard = ctx.runtime.lock().await;
-            let snapshot = guard.snapshot().await;
+            let guard = ctx.runtime.lock().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::failure(err, Some(snapshot)))
         }
     }
@@ -192,15 +220,7 @@ pub async fn import_profile(
                     .last()
                     .map(|profile| profile.id.clone());
                 if let Some(created_id) = created_id {
-                    let crate::app::GuiRuntime {
-                        controller,
-                        app_config_store,
-                        ..
-                    } = &mut *guard;
-                    if let Err(err) = controller
-                        .set_current_profile(created_id, app_config_store)
-                        .await
-                    {
+                    if let Err(err) = guard.activate_profile(created_id).await {
                         return Json(ApiResponse::failure(
                             err,
                             Some(profile_list_response(&guard)),
@@ -415,15 +435,15 @@ pub async fn delete_profile(
 pub async fn set_current_profile(
     Path(id): Path<String>,
     State(ctx): State<RouteState>,
-) -> Json<ApiResponse<AppSnapshot>> {
+) -> Json<ApiResponse<ProfileListResponse>> {
     let mut guard = ctx.runtime.lock().await;
     match guard.activate_profile(id).await {
         Ok(()) => {
-            let snapshot = guard.snapshot().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::success(String::new(), Some(snapshot)))
         }
         Err(err) => {
-            let snapshot = guard.snapshot().await;
+            let snapshot = profile_list_response(&guard);
             Json(ApiResponse::failure(err, Some(snapshot)))
         }
     }
@@ -455,46 +475,16 @@ pub async fn save_profile_content(
     }
 }
 
-pub async fn save_profile(
-    State(ctx): State<RouteState>,
-    Json(request): Json<SaveProfileRequest>,
-) -> Json<ApiResponse<AppSnapshot>> {
-    let mut guard = ctx.runtime.lock().await;
-    let message = if request
-        .id
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-    {
-        String::from("Profile updated.")
-    } else {
-        String::from("Profile added.")
-    };
-    match guard
-        .save_profile(
-            request.id,
-            request.name,
-            request.source,
-            request.content,
-            request.headers,
-            request.update_interval_hours,
-            request.update_cron,
-        )
-        .await
-    {
-        Ok(()) => {
-            let snapshot = guard.snapshot().await;
-            Json(ApiResponse::success(message, Some(snapshot)))
-        }
-        Err(err) => {
-            let snapshot = guard.snapshot().await;
-            Json(ApiResponse::failure(err, Some(snapshot)))
-        }
-    }
-}
-
 fn profile_list_response(runtime: &crate::app::GuiRuntime) -> ProfileListResponse {
     ProfileListResponse {
-        profiles: runtime.controller.state.gui_config.profiles.clone(),
+        profiles: runtime
+            .controller
+            .state
+            .gui_config
+            .profiles
+            .iter()
+            .map(ProfileSummary::from)
+            .collect(),
         current_profile_id: runtime
             .controller
             .state
@@ -516,5 +506,47 @@ fn unique_profile_name(base_name: &str, profiles: &[ProfileItem]) -> String {
             return candidate;
         }
         suffix = suffix.saturating_add(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_summary_excludes_subscription_secrets() {
+        let profile = ProfileItem {
+            id: String::from("profile-1"),
+            name: String::from("Private subscription"),
+            kind: ProfileKind::Url,
+            url: String::from("https://example.test/subscribe?token=secret"),
+            updated_at: 10,
+            headers: vec![ProfileHeader {
+                key: String::from("Authorization"),
+                value: String::from("Bearer secret"),
+            }],
+            remotes: vec![ProfileRemote {
+                name: String::from("Remote"),
+                url: String::from("https://example.test/remote?token=secret"),
+                headers: Vec::new(),
+            }],
+            hook: Some(String::from("secret hook")),
+            keep_subscription_groups_and_rules: true,
+            update_interval_hours: Some(24),
+            update_cron: None,
+            next_update_at: 20,
+            last_attempt_at: 15,
+            last_update_error: Some(String::from("request failed: token=secret")),
+            revision: 1,
+        };
+
+        let summary = ProfileSummary::from(&profile);
+        let value = serde_json::to_value(summary).expect("summary serializes");
+
+        assert_eq!(value["last_update_failed"], true);
+        for secret in ["token", "Authorization", "hook", "last_update_error"] {
+            assert!(value.get(secret).is_none(), "summary exposed {secret}");
+        }
+        assert!(!value.to_string().contains("secret"));
     }
 }

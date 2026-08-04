@@ -6,8 +6,8 @@ import {
   setScoreMode,
 } from '@/api/score';
 import { useClientQuery } from '@/hooks/use-client-query';
-import { useAppSnapshot } from '@/store/app';
-import type { AppSnapshot, CoreApiProxies, CoreApiProxy } from '@/types';
+import { useRuntimeStatus } from '@/store/app';
+import type { RuntimeStatus, CoreApiProxies, CoreApiProxy } from '@/types';
 import { useLocalStorage } from '@vueuse/core';
 import { defineStore } from 'pinia';
 import pLimit from 'p-limit';
@@ -32,8 +32,8 @@ interface ProxyLatencyOverride {
   latencyMs?: number;
 }
 
-function isKernelReady(snapshot: AppSnapshot) {
-  return snapshot.state.kernel.status === 'Running';
+function isKernelReady(snapshot: RuntimeStatus) {
+  return snapshot.kernel.status === 'Running';
 }
 
 function getLatencyMs(proxy?: CoreApiProxy) {
@@ -180,7 +180,7 @@ function normalizeProxyMode(value: string | undefined): ProxyMode {
 }
 
 export const useHomeStore = defineStore('home', () => {
-  const appSnapshot = useAppSnapshot();
+  const runtimeStatus = useRuntimeStatus();
   const latencyOverrides = ref<Record<string, ProxyLatencyOverride>>({});
   let switchingProxy = false;
   const switchingProxyMode = ref(false);
@@ -200,18 +200,18 @@ export const useHomeStore = defineStore('home', () => {
   });
 
   const kernelRunning = computed(
-    () => appSnapshot.data.value?.state.kernel.status === 'Running',
+    () => runtimeStatus.data.value?.kernel.status === 'Running',
   );
 
   const proxyGroupsQuery = useClientQuery(
     computed(() => ({
       queryKey: [
         'overviewProxyGroups',
-        appSnapshot.data.value?.state.kernel.status ?? '',
+        runtimeStatus.data.value?.kernel.status ?? '',
       ],
       queryFn: async () => {
         const snapshot =
-          appSnapshot.data.value ?? (await appSnapshot.refetch()).data;
+          runtimeStatus.data.value ?? (await runtimeStatus.refetch()).data;
         if (!snapshot) {
           throw new Error(i18n.global.t('home.loadFailed'));
         }
@@ -232,11 +232,11 @@ export const useHomeStore = defineStore('home', () => {
     computed(() => ({
       queryKey: [
         'overviewProxyMode',
-        appSnapshot.data.value?.state.kernel.status ?? '',
+        runtimeStatus.data.value?.kernel.status ?? '',
       ],
       queryFn: async () => {
         const snapshot =
-          appSnapshot.data.value ?? (await appSnapshot.refetch()).data;
+          runtimeStatus.data.value ?? (await runtimeStatus.refetch()).data;
         if (!snapshot || !isKernelReady(snapshot)) {
           return 'rule' as ProxyMode;
         }
@@ -306,15 +306,15 @@ export const useHomeStore = defineStore('home', () => {
   });
 
   const loading = computed(
-    () => appSnapshot.isFetching.value || proxyGroupsQuery.isFetching.value,
+    () => runtimeStatus.isFetching.value || proxyGroupsQuery.isFetching.value,
   );
 
   const errorMessage = computed(() => {
     if (actionErrorMessage.value) {
       return actionErrorMessage.value;
     }
-    if (appSnapshot.error.value instanceof Error) {
-      return appSnapshot.error.value.message;
+    if (runtimeStatus.error.value instanceof Error) {
+      return runtimeStatus.error.value.message;
     }
     if (proxyGroupsQuery.error.value instanceof Error) {
       return proxyGroupsQuery.error.value.message;
@@ -370,7 +370,7 @@ export const useHomeStore = defineStore('home', () => {
 
     try {
       const snapshot =
-        appSnapshot.data.value ?? (await appSnapshot.refetch()).data;
+        runtimeStatus.data.value ?? (await runtimeStatus.refetch()).data;
       if (!snapshot || !isKernelReady(snapshot)) {
         throw new Error(i18n.global.t('home.kernelStopped'));
       }
@@ -397,7 +397,7 @@ export const useHomeStore = defineStore('home', () => {
     try {
       switchingProxy = true;
       const snapshot =
-        appSnapshot.data.value ?? (await appSnapshot.refetch()).data;
+        runtimeStatus.data.value ?? (await runtimeStatus.refetch()).data;
       if (!snapshot || !isKernelReady(snapshot)) {
         throw new Error(i18n.global.t('home.kernelStopped'));
       }
@@ -419,7 +419,7 @@ export const useHomeStore = defineStore('home', () => {
   async function testProxyGroup(groupTitle: string) {
     try {
       const snapshot =
-        appSnapshot.data.value ?? (await appSnapshot.refetch()).data;
+        runtimeStatus.data.value ?? (await runtimeStatus.refetch()).data;
       if (!snapshot || !isKernelReady(snapshot)) {
         throw new Error(i18n.global.t('home.kernelStopped'));
       }

@@ -1,5 +1,6 @@
 import {
   fetchAutoLaunchEnabled,
+  fetchSettings,
   fetchKernelVersion,
   fetchLatestKernelRelease,
   saveSettings,
@@ -7,14 +8,15 @@ import {
 } from '@/api/client';
 import { toast } from '@/components/toast';
 import { useClientQuery } from '@/hooks/use-client-query';
-import { useAppSnapshot } from '@/store/app';
-import type { AppSnapshot } from '@/types';
+import { useRuntimeSettings, useRuntimeStatus } from '@/store/app';
+import type { RuntimeSettings } from '@/types';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { i18n } from '@/i18n';
 
 export const useSettingsStore = defineStore('settings', () => {
-  const appSnapshot = useAppSnapshot();
+  const runtimeSettings = useRuntimeSettings();
+  const runtimeStatus = useRuntimeStatus();
   const saving = ref(false);
   const mixedPort = ref('7990');
   const appPort = ref('8787');
@@ -36,28 +38,24 @@ export const useSettingsStore = defineStore('settings', () => {
       systemProxyEnabled.value !== initialSystemProxyEnabled.value,
   );
 
-  function syncFormWithSnapshot(snapshot: AppSnapshot) {
-    mixedPort.value = String(snapshot.state.gui_config.mixed_port);
-    appPort.value = String(snapshot.state.gui_config.app_port);
-    allowLan.value = snapshot.state.gui_config.allow_lan;
-    systemProxyEnabled.value = snapshot.state.gui_config.system_proxy_enabled;
+  function syncFormWithSettings(settings: RuntimeSettings) {
+    mixedPort.value = String(settings.mixed_port);
+    appPort.value = String(settings.app_port);
+    allowLan.value = settings.allow_lan;
+    systemProxyEnabled.value = settings.system_proxy_enabled;
     initialMixedPort.value = mixedPort.value;
     initialAppPort.value = appPort.value;
     initialAllowLan.value = allowLan.value;
     initialSystemProxyEnabled.value = systemProxyEnabled.value;
-    kernelVersion.value = snapshot.state.kernel.version;
   }
 
   const settingsQuery = useClientQuery({
-    queryKey: ['settings'],
+    queryKey: ['settings', 'form'],
     staleTime: 30 * 1000,
     queryFn: async () => {
       try {
-        const result = await appSnapshot.refetch();
-        if (!result.data) {
-          throw new Error(i18n.global.t('errors.loadSettings'));
-        }
-        syncFormWithSnapshot(result.data);
+        const result = await fetchSettings();
+        syncFormWithSettings(result);
         const [localVersion, release] = await Promise.allSettled([
           fetchKernelVersion(),
           fetchLatestKernelRelease(),
@@ -78,7 +76,7 @@ export const useSettingsStore = defineStore('settings', () => {
             title: i18n.global.t('errors.kernelAction'),
           });
         }
-        return result.data;
+        return result;
       } catch (error) {
         toast.error({
           content:
@@ -191,11 +189,12 @@ export const useSettingsStore = defineStore('settings', () => {
         allow_lan: allowLan.value,
         system_proxy_enabled: systemProxyEnabled.value,
       });
-      const result = await appSnapshot.refetch();
+      const result = await runtimeSettings.refetch();
       if (!result.data) {
         throw new Error(i18n.global.t('errors.loadSettings'));
       }
-      syncFormWithSnapshot(result.data);
+      syncFormWithSettings(result.data);
+      void runtimeStatus.refetch();
       toast.info({
         title: i18n.global.t('errors.settingsSaved'),
         content: appPortChanged

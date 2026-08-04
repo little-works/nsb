@@ -8,19 +8,19 @@ import {
   CheckCircleOutlined,
   MoreVertOutlined,
 } from '@vicons/material';
-import type { ProfileItem } from '@/types';
+import type { ProfileSummary } from '@/types';
 import { useI18n } from 'vue-i18n';
 import { i18n } from '@/i18n';
 
 export interface ProfilesTableProps {
-  profiles: ProfileItem[];
+  profiles: ProfileSummary[];
   currentProfileId: string | null;
   loading: boolean;
-  onEdit: (item: ProfileItem) => void;
-  onDelete: (item: ProfileItem) => void;
-  onEditNodes: (item: ProfileItem) => void;
-  onSetCurrent: (item: ProfileItem) => void | Promise<void>;
-  onRefresh: (item: ProfileItem) => void | Promise<void>;
+  onEdit: (item: ProfileSummary) => void;
+  onDelete: (item: ProfileSummary) => void;
+  onEditNodes: (item: ProfileSummary) => void;
+  onSetCurrent: (item: ProfileSummary) => void | Promise<void>;
+  onRefresh: (item: ProfileSummary) => void | Promise<void>;
 }
 
 const props = defineProps<ProfilesTableProps>();
@@ -64,7 +64,7 @@ export default __render<ProfilesTableProps>(() => {
           {props.profiles.map((item) => {
             const isCurrent = item.id === props.currentProfileId;
             const hasAttempt = Boolean(item.last_attempt_at);
-            const updateFailed = hasAttempt && Boolean(item.last_update_error);
+            const updateFailed = hasAttempt && item.last_update_failed;
             return (
               <article
                 key={item.id}
@@ -155,9 +155,9 @@ export default __render<ProfilesTableProps>(() => {
                 </div>
                 <p
                   class="mb-2 truncate rounded bg-surface-container-high px-2 py-1 font-mono text-xs text-outline"
-                  title={item.url || t('profiles.uploadedContent')}
+                  title={item.kind}
                 >
-                  {item.url || t('profiles.uploadedContent')}
+                  {item.kind}
                 </p>
                 <div class="mt-auto flex items-center justify-between gap-3">
                   <div
@@ -166,21 +166,16 @@ export default __render<ProfilesTableProps>(() => {
                   >
                     {hasAttempt ? (
                       updateFailed ? (
-                        <Tooltip
-                          content={item.last_update_error!}
-                          openDelay={0}
+                        <span
+                          aria-label={t('profiles.lastAttemptFailed')}
+                          class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs outline-none
+                            focus-visible:ring-2 focus-visible:ring-error"
+                          tabindex={0}
                         >
-                          <span
-                            aria-label={t('profiles.lastAttemptFailed')}
-                            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs outline-none
-                              focus-visible:ring-2 focus-visible:ring-error"
-                            tabindex={0}
-                          >
-                            <Icon class="text-xs text-error">
-                              <CancelOutlined />
-                            </Icon>
-                          </span>
-                        </Tooltip>
+                          <Icon class="text-xs text-error">
+                            <CancelOutlined />
+                          </Icon>
+                        </span>
                       ) : (
                         <Icon
                           aria-label={t('profiles.lastAttemptSucceeded')}

@@ -16,8 +16,8 @@ import ProfileNodeEditor from '@/pages/profiles/profile-node-editor.setup';
 import ProfilesTable from '@/pages/profiles/profiles-table.setup';
 import { toast } from '@/components/toast';
 import { __render } from '@/shared/helpter';
-import { useAppSnapshot } from '@/store/app';
-import type { AppSnapshot, ProfileItem, ProfileRemote } from '@/types';
+import { useProfiles, useRuntimeStatus } from '@/store/app';
+import type { ProfileRemote, ProfileSummary } from '@/types';
 import { computed, ref } from 'vue';
 import { AddOutlined, FileUploadOutlined } from '@vicons/material';
 import { fileOpen } from 'browser-fs-access';
@@ -29,7 +29,8 @@ export interface ProfilesPageProps {}
 
 defineProps<ProfilesPageProps>();
 
-const appSnapshot = useAppSnapshot();
+const profilesQuery = useProfiles();
+const runtimeStatus = useRuntimeStatus();
 const saving = ref(false);
 const editingId = ref<string | null>(null);
 const dialogOpen = ref(false);
@@ -42,26 +43,19 @@ const formKeepSubscriptionGroupsAndRules = ref(false);
 const updateIntervalHours = ref('');
 const updateCron = ref('');
 const nodeEditorOpen = ref(false);
-const nodeEditorProfile = ref<ProfileItem | null>(null);
+const nodeEditorProfile = ref<ProfileSummary | null>(null);
 const nodeEditorContent = ref('');
 let switchingProfile = false;
-const loading = computed(() => appSnapshot.isFetching.value);
+const loading = computed(() => profilesQuery.isFetching.value);
 
-const snapshot = computed(() => appSnapshot.data.value ?? null);
-const profiles = computed(
-  () => snapshot.value?.state.gui_config.profiles ?? [],
-);
+const profiles = computed(() => profilesQuery.data.value?.profiles ?? []);
 const currentProfileId = computed(
-  () => snapshot.value?.state.gui_config.current_profile_id ?? null,
+  () => profilesQuery.data.value?.current_profile_id ?? null,
 );
 const currentProfile = computed(
   () =>
     profiles.value.find((item) => item.id === currentProfileId.value) ?? null,
 );
-const submitLabel = computed(() =>
-  editingId.value ? 'Save Changes' : 'Add Profile',
-);
-
 const profileContentQuery = useClientQuery({
   queryKey: ['profileContent'],
   queryFn: async () => {
@@ -84,7 +78,7 @@ const saveProfileContentQuery = useClientQuery({
       throw new Error(i18n.global.t('profiles.noneSelected'));
     }
     await saveProfileContent(profile.id, nodeEditorContent.value);
-    await refreshSnapshot();
+    await refreshProfiles();
     return true;
   },
   enabled: false,
@@ -114,7 +108,7 @@ async function handleImportProfile() {
       mimeTypes: ['application/json', 'text/json'],
     });
     await importProfile(file.name, await file.text());
-    await refreshSnapshot();
+    await refreshProfiles();
     toast.info({ title: i18n.global.t('profiles.imported') });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -133,7 +127,7 @@ function closeNodeEditor() {
   nodeEditorContent.value = '';
 }
 
-function openNodeEditor(item: ProfileItem) {
+function openNodeEditor(item: ProfileSummary) {
   nodeEditorProfile.value = item;
   nodeEditorContent.value = '';
   nodeEditorOpen.value = true;
@@ -166,19 +160,21 @@ function saveNodeEditorContent() {
   });
 }
 
-function startEdit(item: ProfileItem) {
+function startEdit(item: ProfileSummary) {
   void navigate(`/webui/profiles/edit?id=${encodeURIComponent(item.id)}`);
 }
 
-async function refreshSnapshot() {
-  const result = await appSnapshot.refetch();
+async function refreshProfiles() {
+  const result = await profilesQuery.refetch();
   if (!result.data) {
     throw new Error(i18n.global.t('profiles.loadFailed'));
   }
   return result.data;
 }
 
-function ensureSnapshot(nextSnapshot: AppSnapshot | null | undefined) {
+function ensureProfiles(
+  nextSnapshot: import('@/types').ProfileListResponse | null | undefined,
+) {
   if (!nextSnapshot) {
     throw new Error(i18n.global.t('profiles.refreshFailed'));
   }
@@ -215,7 +211,7 @@ async function handleSubmit() {
     } else {
       await createProfile(payload);
     }
-    ensureSnapshot(await refreshSnapshot());
+    ensureProfiles(await refreshProfiles());
     toast.info({
       title: i18n.global.t(
         editingId.value ? 'profiles.updated' : 'profiles.added',
@@ -235,7 +231,7 @@ async function handleSubmit() {
   }
 }
 
-async function handleDelete(item: ProfileItem) {
+async function handleDelete(item: ProfileSummary) {
   if (
     !window.confirm(
       i18n.global.t('profiles.confirmDelete', { name: item.name }),
@@ -246,7 +242,7 @@ async function handleDelete(item: ProfileItem) {
 
   try {
     await deleteProfile(item.id);
-    ensureSnapshot(await refreshSnapshot());
+    ensureProfiles(await refreshProfiles());
     toast.info({
       title: i18n.global.t('profiles.deleted', { name: item.name }),
     });
@@ -264,7 +260,7 @@ async function handleDelete(item: ProfileItem) {
   }
 }
 
-async function handleSetCurrent(item: ProfileItem) {
+async function handleSetCurrent(item: ProfileSummary) {
   if (item.id === currentProfileId.value || switchingProfile) {
     return;
   }
@@ -272,7 +268,8 @@ async function handleSetCurrent(item: ProfileItem) {
   try {
     switchingProfile = true;
     await setCurrentProfile(item.id);
-    await refreshSnapshot();
+    await refreshProfiles();
+    await runtimeStatus.refetch();
   } catch (error) {
     toast.error({
       content:
@@ -286,10 +283,11 @@ async function handleSetCurrent(item: ProfileItem) {
   }
 }
 
-async function handleRefresh(item: ProfileItem) {
+async function handleRefresh(item: ProfileSummary) {
   try {
-    ensureSnapshot(await refreshProfileById(item.id));
-    await refreshSnapshot();
+    ensureProfiles(await refreshProfileById(item.id));
+    await refreshProfiles();
+    await runtimeStatus.refetch();
     toast.info({
       title: i18n.global.t('profiles.refreshed', { name: item.name }),
     });

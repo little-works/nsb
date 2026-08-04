@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::app::controller::{AppController, AppSnapshot};
+use crate::app::controller::AppController;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::KernelStatus;
@@ -50,8 +50,8 @@ impl GuiRuntime {
         })
     }
 
-    pub async fn snapshot(&mut self) -> AppSnapshot {
-        self.controller.snapshot(&mut self.singbox_host).await
+    pub async fn sync_runtime(&mut self) {
+        self.controller.sync_runtime(&mut self.singbox_host).await;
     }
 
     pub async fn toggle_kernel(&mut self) -> Result<bool, String> {
@@ -158,31 +158,6 @@ impl GuiRuntime {
             .activate_profile(
                 id,
                 &mut self.singbox_host,
-                &self.profile_host,
-                &self.app_config_store,
-            )
-            .await
-    }
-
-    pub async fn save_profile(
-        &mut self,
-        id: Option<String>,
-        name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
-        update_interval_hours: Option<u32>,
-        update_cron: Option<String>,
-    ) -> Result<(), String> {
-        self.controller
-            .save_profile(
-                id,
-                name,
-                source,
-                content,
-                headers,
-                update_interval_hours,
-                update_cron,
                 &self.profile_host,
                 &self.app_config_store,
             )
@@ -418,7 +393,8 @@ pub async fn update_profile_runtime(
                 // snapshots, so synchronize it before deciding whether a stop is
                 // needed. `start_kernel` then either restarts a live core or starts
                 // the active Profile from its newly persisted runtime config.
-                if controller.snapshot(singbox_host).await.kernel_running {
+                controller.sync_runtime(singbox_host).await;
+                if controller.state.kernel.status == KernelStatus::Running {
                     controller.stop_kernel(singbox_host).await?;
                 }
                 controller

@@ -8,7 +8,7 @@ import { PaletteOutlined } from '@vicons/material';
 import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { i18n, setLocale, type SupportedLocale } from '@/i18n';
-import { useAppSnapshot } from '@/store/app';
+import { useRuntimeSettings } from '@/store/app';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
@@ -21,14 +21,14 @@ const themeMode = ref<ThemeMode>('light');
 const requestedLocale = ref<SupportedLocale>(
   i18n.global.locale.value as SupportedLocale,
 );
-const appSnapshot = useAppSnapshot();
+const runtimeSettings = useRuntimeSettings();
 
 const appLanguageUpdateQuery = useClientQuery({
   queryKey: ['appLanguage', 'update'],
   enabled: false,
   queryFn: async () => {
     await saveAppLanguage(requestedLocale.value);
-    const result = await appSnapshot.refetch();
+    const result = await runtimeSettings.refetch();
     if (!result.data) {
       throw new Error(i18n.global.t('errors.loadSettings'));
     }
@@ -102,7 +102,7 @@ onMounted(() => {
   themeMode.value = readThemeModeFromCookie();
   applyThemeMode(themeMode.value);
   const initialLocale = requestedLocale.value;
-  void appSnapshot.refetch().then((result) => {
+  void runtimeSettings.refetch().then((result) => {
     if (
       requestedLocale.value !== initialLocale ||
       appLanguageUpdateQuery.isFetching.value ||
@@ -111,7 +111,7 @@ onMounted(() => {
       return;
     }
 
-    const appLanguage = result.data.state.gui_config.app_language;
+    const appLanguage = result.data.app_language;
     requestedLocale.value = appLanguage;
     setLocale(appLanguage);
   });
