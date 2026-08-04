@@ -22,9 +22,9 @@ export interface ProxyGroupSectionProps {
 const props = defineProps<ProxyGroupSectionProps>();
 
 defineOptions({ name: 'ProxyGroupSection' });
+const { t } = useI18n();
 
 export default __render<ProxyGroupSectionProps>(() => {
-  const { t } = useI18n();
   return (
     <section
       id={props.anchorId}

@@ -39,9 +39,9 @@ const props = withDefaults(defineProps<ToastProps>(), {
   duration: 5000,
   onClose: () => {},
 });
+const { t } = useI18n();
 
 export default __render<ToastProps>(() => {
-  const { t } = useI18n();
   const IconComponent =
     props.variant === 'error'
       ? ErrorOutlined

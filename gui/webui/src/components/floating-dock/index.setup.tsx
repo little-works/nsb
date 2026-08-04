@@ -11,9 +11,9 @@ function scrollToTop() {
 }
 
 defineOptions({ name: 'FloatingDock' });
+const { t } = useI18n();
 
 export default __render(() => {
-  const { t } = useI18n();
   const content = floatingDockStore.content;
 
   return (

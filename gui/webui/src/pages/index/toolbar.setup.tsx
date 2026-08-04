@@ -53,9 +53,9 @@ function getSortIcon() {
 }
 
 defineOptions({ name: 'OverviewToolbar' });
+const { t } = useI18n();
 
 export default __render<OverviewToolbarProps>(() => {
-  const { t } = useI18n();
   const SortIcon = getSortIcon();
 
   return (

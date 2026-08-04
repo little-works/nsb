@@ -46,9 +46,9 @@ function formatTimestamp(timestamp: number, full = false) {
 }
 
 defineOptions({ name: 'ProfilesTable' });
+const { t } = useI18n();
 
 export default __render<ProfilesTableProps>(() => {
-  const { t } = useI18n();
   return (
     <section>
       {props.loading && props.profiles.length === 0 ? (

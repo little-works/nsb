@@ -11,9 +11,9 @@ export interface OverviewFeedbackProps {
 const props = defineProps<OverviewFeedbackProps>();
 
 defineOptions({ name: 'OverviewFeedback' });
+const { t } = useI18n();
 
 export default __render<OverviewFeedbackProps>(() => {
-  const { t } = useI18n();
   return (
     <>
       {props.errorMessage ? (

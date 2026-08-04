@@ -27,6 +27,7 @@ export interface GeneralSectionProps {
 
 const props = defineProps<GeneralSectionProps>();
 const mounted = useMounted();
+const { t } = useI18n();
 
 defineOptions({ name: 'GeneralSection' });
 
@@ -47,7 +48,6 @@ function renderAutoLaunchHelpButton(ariaLabel: string) {
 }
 
 export default __render<GeneralSectionProps>(() => {
-  const { t } = useI18n();
   const disabled = props.loading || props.saving;
   const settings = [
     {

@@ -303,9 +303,9 @@ async function handleRefresh(item: ProfileSummary) {
 }
 
 defineOptions({ name: 'ProfilesPage' });
+const { t } = useI18n();
 
 export default __render<ProfilesPageProps>(() => {
-  const { t } = useI18n();
   return (
     <Page
       title={t('profiles.title')}

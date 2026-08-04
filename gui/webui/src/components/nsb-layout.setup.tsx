@@ -69,9 +69,9 @@ const navItems: NavItem[] = [
 ];
 
 defineOptions({ name: 'NsbLayout' });
+const { t } = useI18n();
 
 export default __render<NsbLayoutProps>(() => {
-  const { t } = useI18n();
   const translatedNavItems = navItems.map((item) => ({
     ...item,
     label: t(`nav.${item.key.toLowerCase()}`),

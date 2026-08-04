@@ -195,9 +195,9 @@ function formatPathSegment(segment: JsonPathSegment, path: JsonPathSegment[]) {
 }
 
 defineOptions({ name: 'ProfileNodeEditor' });
+const { t } = useI18n();
 
 export default __render<ProfileNodeEditorProps>(() => {
-  const { t } = useI18n();
   return (
     <Dialog
       closeDisabled={props.saving}

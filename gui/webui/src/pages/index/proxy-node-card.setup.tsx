@@ -19,9 +19,9 @@ function getLatencyClass(item: ProxyItem) {
 }
 
 defineOptions({ name: 'ProxyNodeCard' });
+const { t } = useI18n();
 
 export default __render<ProxyNodeCardProps>(() => {
-  const { t } = useI18n();
   return (
     <div class="flex flex-col rounded border border-outline-variant bg-surface-container-lowest p-3 transition-all duration-200 ease-in-out hover:-translate-y-px">
       <div class="mb-2 flex items-start justify-between">

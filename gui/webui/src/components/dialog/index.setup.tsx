@@ -43,9 +43,9 @@ function preventCloseWhileDisabled(event: Event) {
 }
 
 defineOptions({ name: 'Dialog' });
+const { t } = useI18n();
 
 export default __render<DialogProps>(() => {
-  const { t } = useI18n();
   return (
     <V0Dialog.Root
       modelValue={props.open}

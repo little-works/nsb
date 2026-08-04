@@ -51,7 +51,7 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: ['pinia', 'vike-vue-pinia'],
+    noExternal: ['pinia', 'vike-vue-pinia', 'vue-i18n'],
   },
   css: {
     modules: {},

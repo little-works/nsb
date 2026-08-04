@@ -142,9 +142,9 @@ useMountedOrActivated(() => {
 useUnmountedOrDeactivated(() => unsubscribeLogs?.());
 
 defineOptions({ name: 'LogsPage' });
+const { t } = useI18n();
 
 export default __render(() => {
-  const { t } = useI18n();
   return (
     <Page title={t('logs.title')}>
       {{

@@ -163,9 +163,9 @@ watch(
 );
 
 defineOptions({ name: 'OverviewPage' });
+const { t } = useI18n();
 
 export default __render<OverviewPageProps>(() => {
-  const { t } = useI18n();
   return (
     <Page>
       {{

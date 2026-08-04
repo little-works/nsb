@@ -84,9 +84,9 @@ function connectedFor(start: string, locale: string) {
 }
 
 defineOptions({ name: 'ConnectionsPage' });
+const { t, locale } = useI18n();
 
 export default __render(() => {
-  const { t, locale } = useI18n();
   return (
     <Page title={t('connections.title')} subtitle={t('connections.subtitle')}>
       {{

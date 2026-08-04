@@ -134,8 +134,9 @@ function toggleHeaders(index: number) {
   expandedHeaderIndexes.value = next;
 }
 
+const { t } = useI18n();
+
 export default __render<ProfileDialogProps>(() => {
-  const { t } = useI18n();
   const remoteLabel = (remote: ProfileRemote, index: number) =>
     remote.name.trim() ||
     t('profiles.dialog.remotePlaceholder', { index: index + 1 });
