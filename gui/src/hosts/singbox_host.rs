@@ -194,6 +194,8 @@ impl SingBoxHost {
             return Err(String::from("sing-box is already running."));
         }
 
+        self.cleanup_orphaned_kernel().await?;
+
         self.ensure_kernel_exists()?;
         let launch_config = self.materialize_config(source, gui_config, hook).await?;
 
@@ -218,14 +220,18 @@ impl SingBoxHost {
             .spawn()
             .map_err(|err| format!("Failed to start sing-box: {err}"))?;
 
-        self.wait_until_ready(&mut child, &launch_config).await?;
-
         if let Err(err) = self.write_process_marker(child.id()).await {
-            let mut child = child;
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child(&mut child);
+            let _ = self.clear_pid_file().await;
             return Err(err);
         }
+
+        if let Err(err) = self.wait_until_ready(&mut child, &launch_config).await {
+            terminate_child(&mut child);
+            let _ = self.clear_pid_file().await;
+            return Err(err);
+        }
+
         self.child = Some(child);
         info!("sing-box started successfully");
         Ok(launch_config)
@@ -562,8 +568,7 @@ impl SingBoxHost {
             }
 
             if tokio::time::Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_child(child);
                 return Err(format!(
                     "Timed out waiting for sing-box controller to start ({} seconds).",
                     CONTROLLER_START_TIMEOUT_SECS
@@ -573,6 +578,11 @@ impl SingBoxHost {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
+}
+
+fn terminate_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn default_cache_file() -> CacheFile {

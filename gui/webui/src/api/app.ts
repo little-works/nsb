@@ -13,6 +13,7 @@ import type {
 const request = new Request();
 const kernelDownloadRequest = new Request({ timeout: 300_000 });
 const profileActivationRequest = new Request({ timeout: 60_000 });
+const profileRefreshRequest = new Request({ timeout: 60_000 });
 
 export interface KernelReleaseInfo {
   version: string;
@@ -89,11 +90,15 @@ export function setCurrentProfile(id: string) {
 }
 
 export function refreshProfile() {
-  return request.post<ProfileListResponse>('/api/profiles/refresh');
+  return profileRefreshRequest.post<ProfileListResponse>(
+    '/api/profiles/refresh',
+  );
 }
 
 export function refreshProfileById(id: string) {
-  return request.post<ProfileListResponse>(`/api/profiles/${id}/refresh`);
+  return profileRefreshRequest.post<ProfileListResponse>(
+    `/api/profiles/${id}/refresh`,
+  );
 }
 
 export function saveSettings(payload: SaveSettingsPayload) {
