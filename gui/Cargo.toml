@@ -7,6 +7,10 @@ authors.workspace = true
 description = "Windows desktop manager for sing-box"
 build = "build.rs"
 
+[[bin]]
+name = "nsb"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 auto-launch = "0.6"
