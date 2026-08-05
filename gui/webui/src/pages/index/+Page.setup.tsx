@@ -7,6 +7,7 @@ const homeStore = useHomeStore();
 const {
   errorMessage,
   hideUnavailableNodes,
+  kernelInstalled,
   kernelRunning,
   loading,
   proxyMode,
@@ -23,6 +24,7 @@ export default __render(() => (
     errorMessage={errorMessage.value}
     groups={proxyGroups.value}
     hideUnavailableNodes={hideUnavailableNodes.value}
+    kernelInstalled={kernelInstalled.value}
     kernelRunning={kernelRunning.value}
     loading={loading.value}
     onProxyModeChange={homeStore.setProxyMode}

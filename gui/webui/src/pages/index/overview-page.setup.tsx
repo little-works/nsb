@@ -27,6 +27,7 @@ export interface OverviewPageProps {
   groups: ProxyGroup[];
   loading: boolean;
   errorMessage: string;
+  kernelInstalled: boolean;
   kernelRunning: boolean;
   searchKeyword: string;
   hideUnavailableNodes: boolean;
@@ -204,6 +205,7 @@ export default __render<OverviewPageProps>(() => {
               <Feedback
                 errorMessage={props.errorMessage}
                 hasGroups={props.groups.length > 0}
+                kernelInstalled={props.kernelInstalled}
                 kernelRunning={props.kernelRunning}
                 loading={props.loading}
               />

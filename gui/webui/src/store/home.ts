@@ -202,6 +202,9 @@ export const useHomeStore = defineStore('home', () => {
   const kernelRunning = computed(
     () => runtimeStatus.data.value?.kernel.status === 'Running',
   );
+  const kernelInstalled = computed(
+    () => runtimeStatus.data.value?.kernel.installed ?? true,
+  );
 
   const proxyGroupsQuery = useClientQuery(
     computed(() => ({
@@ -482,6 +485,7 @@ export const useHomeStore = defineStore('home', () => {
   return {
     errorMessage,
     hideUnavailableNodes,
+    kernelInstalled,
     kernelRunning,
     loading,
     proxyMode,
