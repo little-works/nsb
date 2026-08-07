@@ -1,0 +1,40 @@
+name: macOS ARM64 Test Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install WebUI dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WebUI
+        run: pnpm --dir gui/webui run build
+
+      - name: Build macOS ARM64 GUI
+        run: cargo build -p nsb-gui --release
+
+      - name: Package macOS ARM64 test artifact
+        run: tar -czf nsb-macos-arm64.tar.gz -C target/release nsb
+
+      - name: Upload macOS ARM64 test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsb-macos-arm64
+          path: nsb-macos-arm64.tar.gz
+          if-no-files-found: error
