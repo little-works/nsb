@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const rootDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appDirectory = resolve(rootDirectory, 'NSB.app');
 const iconsetDirectory = resolve(rootDirectory, 'NSB.iconset');
-const archivePath = resolve(rootDirectory, 'NSB-macos-arm64.app.tar.gz');
+const archivePath = resolve(rootDirectory, 'NSB-macos-arm64.zip');
 const binaryPath = resolve(rootDirectory, 'target', 'release', 'nsb');
 const iconPath = resolve(rootDirectory, 'gui', 'assets', 'nsb-logo.png');
 
@@ -149,7 +149,7 @@ async function main() {
 `,
   );
 
-  run('tar', ['-czf', archivePath, 'NSB.app']);
+  run('ditto', ['-c', '-k', '--keepParent', appDirectory, archivePath]);
 }
 
 await main();

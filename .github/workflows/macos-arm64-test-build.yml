@@ -39,8 +39,8 @@ jobs:
         run: mise run package-macos-app
 
       - name: Upload macOS ARM64 test artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: NSB-macos-arm64.app.tar.gz
-          path: NSB-macos-arm64.app.tar.gz
+          path: NSB-macos-arm64.zip
+          archive: false
           if-no-files-found: error
