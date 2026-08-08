@@ -1,5 +1,4 @@
 import { __render } from '@/shared/helpter';
-import { Button } from '@/components/button';
 import type { ProxyItem } from './types';
 import { useI18n } from 'vue-i18n';
 
@@ -23,42 +22,49 @@ const { t } = useI18n();
 
 export default __render<ProxyNodeCardProps>(() => {
   return (
-    <div class="flex flex-col rounded border border-outline-variant bg-surface-container-lowest p-3 transition-all duration-200 ease-in-out hover:-translate-y-px">
-      <div class="mb-2 flex items-start justify-between">
-        <div class="flex items-center space-x-2">
-          <div
-            class={[
-              'h-1.5 w-1.5 rounded-full',
-              props.item.active ? 'bg-secondary' : 'bg-outline',
-            ]}
-          ></div>
-          <span class="max-w-30 truncate text-sm font-medium leading-5 text-on-surface">
-            {props.item.name}
-          </span>
-        </div>
+    <button
+      type="button"
+      disabled={props.item.active}
+      class="
+        grid h-20 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2
+        rounded border border-outline-variant bg-surface-container-lowest p-3
+        text-left
+        transition-all duration-200 ease-in-out hover:-translate-y-px hover:border-primary hover:bg-surface-container-low
+        disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:border-outline-variant disabled:hover:bg-surface-container-lowest
+      "
+      onClick={props.onSwitch}
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <div
+          class={[
+            'h-2 w-2 shrink-0 rounded-full transition-shadow',
+            props.item.active
+              ? 'bg-secondary ring-2 ring-secondary/30 ring-offset-1 ring-offset-surface-container-lowest'
+              : 'bg-outline',
+          ]}
+        ></div>
+        <span class="min-w-0 line-clamp-3 text-sm font-medium leading-4 text-on-surface">
+          {props.item.name}
+        </span>
+      </div>
+      <div class="flex min-w-0 flex-col items-end justify-between">
         <span
           class={[
-            'flex h-5 shrink-0 items-center font-mono text-xs leading-4 whitespace-nowrap',
+            'font-mono text-xs leading-4 whitespace-nowrap',
             getLatencyClass(props.item),
           ]}
         >
           {props.item.latency}
         </span>
-      </div>
-      <div class="mt-auto flex items-center justify-between">
-        <span class="flex h-5 items-center rounded bg-surface-container-high px-1.5 font-mono text-xs uppercase tracking-tighter whitespace-nowrap text-on-surface-variant">
+        <span
+          class="
+            flex h-5 max-w-full items-center truncate rounded bg-surface-container-high px-1.5
+            font-mono text-xs uppercase tracking-tighter whitespace-nowrap text-on-surface-variant
+          "
+        >
           {props.item.tag || t('home.unknown')}
         </span>
-        <Button
-          shape="rect"
-          size="xs"
-          variant={props.item.active ? 'solid' : 'outline'}
-          onClick={props.onSwitch}
-          class="font-bold uppercase"
-        >
-          {t(props.item.active ? 'home.active' : 'home.switch')}
-        </Button>
       </div>
-    </div>
+    </button>
   );
 });
