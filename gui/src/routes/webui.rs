@@ -13,6 +13,10 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 
 use super::RouteState;
 
+#[cfg(not(debug_assertions))]
+static WEBUI_DIST: include_dir::Dir<'_> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/webui/dist/client");
+
 pub async fn index_redirect(_uri: OriginalUri) -> Response {
     Redirect::temporary("/webui/").into_response()
 }
@@ -48,16 +52,15 @@ async fn serve_webui(_ctx: RouteState, uri: Uri, headers: HeaderMap) -> Response
 
 #[cfg(not(debug_assertions))]
 async fn serve_built_webui(uri: Uri, headers: HeaderMap) -> Response {
-    let dist_dir = webui_dist_dir();
     let Some(relative_path) = webui_relative_path(uri.path()) else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let Some(resolved_path) = resolve_webui_file(&dist_dir, &relative_path) else {
+    let Some(file) = resolve_webui_file(&relative_path) else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    serve_file(resolved_path, &headers).await
+    serve_file(file, &headers)
 }
 
 #[cfg(debug_assertions)]
@@ -120,27 +123,22 @@ async fn proxy_response(response: reqwest::Response, request_headers: &HeaderMap
 }
 
 #[cfg(not(debug_assertions))]
-async fn serve_file(path: PathBuf, request_headers: &HeaderMap) -> Response {
-    let content_type = content_type_for(&path);
-    match tokio::fs::read(&path).await {
-        Ok(bytes) => {
-            let mut headers = HeaderMap::new();
-            headers.insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
-            if content_type.starts_with("text/html") {
-                let theme = resolve_webui_theme(request_headers);
-                match String::from_utf8(bytes) {
-                    Ok(body) => (headers, inject_webui_placeholders(body, theme)).into_response(),
-                    Err(err) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Html(format!("<h1>WebUI HTML decode failed</h1><p>{}</p>", err)),
-                    )
-                        .into_response(),
-                }
-            } else {
-                (headers, bytes).into_response()
-            }
+fn serve_file(file: &'static include_dir::File<'static>, request_headers: &HeaderMap) -> Response {
+    let content_type = content_type_for(file.path());
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+    if content_type.starts_with("text/html") {
+        let theme = resolve_webui_theme(request_headers);
+        match String::from_utf8(file.contents().to_vec()) {
+            Ok(body) => (headers, inject_webui_placeholders(body, theme)).into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(format!("<h1>WebUI HTML decode failed</h1><p>{}</p>", err)),
+            )
+                .into_response(),
         }
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    } else {
+        (headers, file.contents().to_vec()).into_response()
     }
 }
 
@@ -200,27 +198,26 @@ fn webui_relative_path(uri_path: &str) -> Option<PathBuf> {
 }
 
 #[cfg(not(debug_assertions))]
-fn resolve_webui_file(dist_dir: &Path, relative_path: &Path) -> Option<PathBuf> {
-    let direct_path = dist_dir.join(relative_path);
-    if direct_path.is_file() {
-        return Some(direct_path);
+fn resolve_webui_file(relative_path: &Path) -> Option<&'static include_dir::File<'static>> {
+    if let Some(file) = WEBUI_DIST.get_file(relative_path) {
+        return Some(file);
     }
 
-    let nested_index = dist_dir.join(relative_path).join("index.html");
-    if nested_index.is_file() {
-        return Some(nested_index);
+    let nested_index = relative_path.join("index.html");
+    if let Some(file) = WEBUI_DIST.get_file(nested_index) {
+        return Some(file);
     }
 
     let mut current = relative_path.to_path_buf();
     loop {
         let candidate = if current.as_os_str().is_empty() {
-            dist_dir.join("index.html")
+            Path::new("index.html").to_path_buf()
         } else {
-            dist_dir.join(&current).join("index.html")
+            current.join("index.html")
         };
 
-        if candidate.is_file() {
-            return Some(candidate);
+        if let Some(file) = WEBUI_DIST.get_file(candidate) {
+            return Some(file);
         }
 
         if !current.pop() {
@@ -228,8 +225,7 @@ fn resolve_webui_file(dist_dir: &Path, relative_path: &Path) -> Option<PathBuf> 
         }
     }
 
-    let root_index = dist_dir.join("index.html");
-    root_index.is_file().then_some(root_index)
+    WEBUI_DIST.get_file("index.html")
 }
 
 #[cfg(not(debug_assertions))]
@@ -250,12 +246,4 @@ fn content_type_for(path: &Path) -> &'static str {
         Some("map") => "application/json; charset=utf-8",
         _ => "application/octet-stream",
     }
-}
-
-#[cfg(not(debug_assertions))]
-fn webui_dist_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("webui")
-        .join("dist")
-        .join("client")
 }

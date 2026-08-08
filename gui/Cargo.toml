@@ -19,6 +19,7 @@ chrono = { version = "0.4", features = ["clock"] }
 cron = "0.12"
 futures-util = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
+include_dir = "0.7"
 log.workspace = true
 nsb-core.workspace = true
 open = "5"
