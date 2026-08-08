@@ -32,47 +32,11 @@ jobs:
       - name: Build macOS ARM64 GUI
         run: cargo build -p nsb-gui --release
 
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+
       - name: Package macOS ARM64 test artifact
-        run: |
-          mkdir -p NSB.app/Contents/MacOS NSB.app/Contents/Resources
-          cp target/release/nsb NSB.app/Contents/MacOS/nsb
-          chmod +x NSB.app/Contents/MacOS/nsb
-
-          mkdir NSB.iconset
-          sips -z 16 16 gui/assets/nsb-logo.png --out NSB.iconset/icon_16x16.png
-          sips -z 32 32 gui/assets/nsb-logo.png --out NSB.iconset/icon_16x16@2x.png
-          sips -z 32 32 gui/assets/nsb-logo.png --out NSB.iconset/icon_32x32.png
-          sips -z 64 64 gui/assets/nsb-logo.png --out NSB.iconset/icon_32x32@2x.png
-          sips -z 128 128 gui/assets/nsb-logo.png --out NSB.iconset/icon_128x128.png
-          sips -z 256 256 gui/assets/nsb-logo.png --out NSB.iconset/icon_128x128@2x.png
-          sips -z 256 256 gui/assets/nsb-logo.png --out NSB.iconset/icon_256x256.png
-          sips -z 512 512 gui/assets/nsb-logo.png --out NSB.iconset/icon_256x256@2x.png
-          sips -z 512 512 gui/assets/nsb-logo.png --out NSB.iconset/icon_512x512.png
-          sips -z 1024 1024 gui/assets/nsb-logo.png --out NSB.iconset/icon_512x512@2x.png
-          iconutil -c icns NSB.iconset -o NSB.app/Contents/Resources/nsb.icns
-
-          cat > NSB.app/Contents/Info.plist <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key>
-            <string>nsb</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.little-works.nsb</string>
-            <key>CFBundleVersion</key>
-            <string>0.1.0</string>
-            <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleIconFile</key>
-            <string>nsb</string>
-          </dict>
-          </plist>
-          EOF
-
-          tar -czf NSB-macos-arm64.app.tar.gz NSB.app
+        run: mise run package-macos-app
 
       - name: Upload macOS ARM64 test artifact
         uses: actions/upload-artifact@v4

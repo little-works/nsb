@@ -21,3 +21,6 @@ run = [
     },
     "cargo build -p nsb-gui --release"
 ]
+
+[tasks.package-macos-app]
+run = "node scripts/package-macos-app.mjs"
