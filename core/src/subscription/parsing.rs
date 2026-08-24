@@ -110,6 +110,7 @@ fn parse_clash(
                 | "vmess"
                 | "vless"
                 | "trojan"
+                | "anytls"
                 | "hysteria2"
                 | "tuic"
                 | "socks"

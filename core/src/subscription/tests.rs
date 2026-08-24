@@ -27,6 +27,30 @@ fn drops_groups_and_rules_when_disabled() {
 }
 
 #[test]
+fn parses_anytls_clash_proxy() {
+    let snapshot = parse_remote(
+        &remote(),
+        "proxies: [{name: anytls-node, type: anytls, server: example.com, port: 443, password: secret}]",
+        false,
+        false,
+    )
+    .unwrap();
+
+    assert!(snapshot.warnings.is_empty());
+    assert_eq!(snapshot.proxy_nodes.len(), 1);
+    assert_eq!(
+        snapshot.proxy_nodes[0],
+        json!({
+            "tag": "anytls-node",
+            "type": "anytls",
+            "server": "example.com",
+            "server_port": 443,
+            "password": "secret",
+        })
+    );
+}
+
+#[test]
 fn generated_config_excludes_source_groups_and_rules_when_disabled() {
     let snapshot = parse_remote(
         &remote(),

@@ -9,7 +9,10 @@ use crate::state::{
     current_timestamp, generate_profile_id,
 };
 
-const PROFILE_USER_AGENT: &str = concat!("ClashforWindows/0.20.16 NSB/", env!("CARGO_PKG_VERSION"));
+const PROFILE_USER_AGENT: &str = concat!(
+    "ClashforWindows/0.20.16 clash-verge/2.5.2 NSB/",
+    env!("CARGO_PKG_VERSION"),
+);
 
 pub struct AppController {
     pub state: AppState,
