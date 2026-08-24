@@ -142,6 +142,8 @@ async function main() {
   <string>${escapedVersion}</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>LSUIElement</key>
+  <true/>
   <key>CFBundleIconFile</key>
   <string>nsb</string>
 </dict>
