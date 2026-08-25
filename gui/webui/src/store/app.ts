@@ -1,4 +1,9 @@
-import { fetchRuntime, fetchSettings, listProfiles } from '@/api/app';
+import {
+  fetchRuntime,
+  fetchSettings,
+  listProfiles,
+  listTemplates,
+} from '@/api/app';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { type AppPageTypes } from '@/types';
 import { computed, type ComputedRef } from 'vue';
@@ -8,6 +13,7 @@ import { resolveAppPageType } from '@/shared/page';
 const runtimeQueryKey = ['runtime'];
 const settingsQueryKey = ['settings'];
 const profilesQueryKey = ['profiles'];
+const templatesQueryKey = ['templates'];
 
 export function useRuntimeStatus() {
   return useClientQuery({
@@ -31,6 +37,15 @@ export function useProfiles() {
   return useClientQuery({
     queryKey: profilesQueryKey,
     queryFn: listProfiles,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useTemplates() {
+  return useClientQuery({
+    queryKey: templatesQueryKey,
+    queryFn: listTemplates,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });

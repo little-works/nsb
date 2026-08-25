@@ -24,6 +24,13 @@ export function resolveAppPageType(pathname?: string | null): AppPageTypes {
     return AppPageType.Profiles;
   }
 
+  if (
+    normalizedPath === '/templates' ||
+    normalizedPath.startsWith('/templates/')
+  ) {
+    return AppPageType.Templates;
+  }
+
   if (normalizedPath === '/logs') {
     return AppPageType.Logs;
   }

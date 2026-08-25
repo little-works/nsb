@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 use ts_rs::TS;
 
-use crate::state::ProfileItem;
+use crate::state::{ProfileItem, ProfileTemplate};
 use crate::utils::path::ensure_data_dir;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
@@ -57,8 +57,6 @@ fn default_app_language() -> AppLanguage {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct AppConfig {
-    pub mixed_port: u16,
-    pub allow_lan: bool,
     #[serde(default = "default_app_port")]
     pub app_port: u16,
     #[serde(default)]
@@ -68,18 +66,19 @@ pub struct AppConfig {
     #[serde(default)]
     pub profiles: Vec<ProfileItem>,
     #[serde(default)]
+    pub templates: Vec<ProfileTemplate>,
+    #[serde(default)]
     pub current_profile_id: Option<String>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            mixed_port: default_mixed_port(),
-            allow_lan: false,
             app_port: default_app_port(),
             system_proxy_enabled: false,
             app_language: AppLanguage::default(),
             profiles: Vec::new(),
+            templates: Vec::new(),
             current_profile_id: None,
         }
     }
@@ -87,10 +86,6 @@ impl Default for AppConfig {
 
 fn default_app_port() -> u16 {
     if cfg!(debug_assertions) { 18787 } else { 8787 }
-}
-
-fn default_mixed_port() -> u16 {
-    if cfg!(debug_assertions) { 17990 } else { 7990 }
 }
 
 pub struct AppConfigStore {

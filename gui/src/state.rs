@@ -38,13 +38,54 @@ pub struct KernelInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(rename_all = "UPPERCASE")]
 #[ts(export)]
-pub enum ProfileKind {
-    #[ts(rename = "URL")]
-    Url,
-    #[ts(rename = "FILE")]
-    File,
+pub struct ProfileTemplate {
+    #[serde(
+        default = "generate_profile_id",
+        deserialize_with = "deserialize_profile_id"
+    )]
+    pub id: String,
+    pub name: String,
+    pub content: String,
+    #[serde(default, deserialize_with = "deserialize_timestamp")]
+    pub updated_at: u64,
+    #[serde(default)]
+    pub reference_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ProfileRemoteFormat {
+    #[default]
+    Clash,
+    Singbox,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteKeepFields {
+    #[serde(default = "keep_nodes")]
+    pub nodes: bool,
+    #[serde(default)]
+    pub groups: bool,
+    #[serde(default)]
+    pub route_final: bool,
+    #[serde(default)]
+    pub route_rules: bool,
+}
+fn keep_nodes() -> bool {
+    true
+}
+impl Default for ProfileRemoteKeepFields {
+    fn default() -> Self {
+        Self {
+            nodes: true,
+            groups: false,
+            route_final: false,
+            route_rules: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -61,6 +102,10 @@ pub struct ProfileRemote {
     pub url: String,
     #[serde(default)]
     pub headers: Vec<ProfileHeader>,
+    #[serde(default)]
+    pub format: ProfileRemoteFormat,
+    #[serde(default)]
+    pub keep: ProfileRemoteKeepFields,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -72,18 +117,14 @@ pub struct ProfileItem {
     )]
     pub id: String,
     pub name: String,
-    pub kind: ProfileKind,
-    pub url: String,
+    #[serde(default)]
+    pub template_id: String,
     #[serde(default, deserialize_with = "deserialize_timestamp")]
     pub updated_at: u64,
-    #[serde(default)]
-    pub headers: Vec<ProfileHeader>,
     #[serde(default)]
     pub remotes: Vec<ProfileRemote>,
     #[serde(default)]
     pub hook: Option<String>,
-    #[serde(default)]
-    pub keep_subscription_groups_and_rules: bool,
     #[serde(default)]
     pub update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -96,30 +137,6 @@ pub struct ProfileItem {
     pub last_update_error: Option<String>,
     #[serde(default)]
     pub revision: u64,
-}
-
-impl ProfileItem {
-    pub fn source_kind(source: &str) -> ProfileKind {
-        if source.starts_with("http://") || source.starts_with("https://") {
-            ProfileKind::Url
-        } else {
-            ProfileKind::File
-        }
-    }
-
-    pub fn normalized_remotes(&self) -> Vec<ProfileRemote> {
-        if !self.remotes.is_empty() {
-            return self.remotes.clone();
-        }
-        if self.url.trim().is_empty() {
-            return Vec::new();
-        }
-        vec![ProfileRemote {
-            name: String::from("Default"),
-            url: self.url.clone(),
-            headers: self.headers.clone(),
-        }]
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -214,7 +231,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{ProfileItem, generate_profile_id};
+    use super::generate_profile_id;
 
     #[test]
     fn generates_eight_character_lowercase_alphanumeric_profile_ids() {
@@ -224,20 +241,5 @@ mod tests {
             id.bytes()
                 .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
         );
-    }
-
-    #[test]
-    fn defaults_and_serializes_subscription_groups_and_rules_setting() {
-        let mut profile: ProfileItem = serde_json::from_value(serde_json::json!({
-            "name": "Profile",
-            "kind": "URL",
-            "url": "https://example.com/subscription"
-        }))
-        .unwrap();
-        assert!(!profile.keep_subscription_groups_and_rules);
-
-        profile.keep_subscription_groups_and_rules = true;
-        let serialized = serde_json::to_value(profile).unwrap();
-        assert_eq!(serialized["keep_subscription_groups_and_rules"], true);
     }
 }

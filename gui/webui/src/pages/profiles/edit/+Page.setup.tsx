@@ -1,11 +1,17 @@
 import { __render } from '@/shared/helpter';
-import { createProfile, getProfile, updateProfile } from '@/api/client';
+import {
+  createProfile,
+  createTemplate,
+  getDefaultTemplate,
+  getProfile,
+  updateProfile,
+} from '@/api/client';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { toast } from '@/components/toast';
 import ProfileDialog from '@/pages/profiles/profile-dialog.setup';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
-import { useProfiles, useRuntimeStatus } from '@/store/app';
+import { useProfiles, useRuntimeStatus, useTemplates } from '@/store/app';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { useFloatingDockStore } from '@/store/floating-dock';
 import type { ProfileRemote } from '@/types';
@@ -39,7 +45,23 @@ export function onFinalize(input) {
 }
 `;
 
+function createEmptyRemote(): ProfileRemote {
+  return {
+    name: '',
+    url: '',
+    headers: [],
+    format: 'clash',
+    keep: {
+      nodes: true,
+      groups: false,
+      route_final: false,
+      route_rules: false,
+    },
+  };
+}
+
 const profilesQuery = useProfiles();
+const templatesQuery = useTemplates();
 const runtimeStatus = useRuntimeStatus();
 const floatingDockStore = useFloatingDockStore();
 const pageContext = usePageContext();
@@ -49,9 +71,9 @@ const profileId = computed(() =>
 const initialized = ref(false);
 const saving = ref(false);
 const name = ref('');
-const remotes = ref<ProfileRemote[]>([{ name: '', url: '', headers: [] }]);
+const templateId = ref('');
+const remotes = ref<ProfileRemote[]>([createEmptyRemote()]);
 const hook = ref(EMPTY_PROFILE_HOOK_TEMPLATE);
-const keepSubscriptionGroupsAndRules = ref(false);
 const interval = ref('');
 const cron = ref('');
 let unregisterDockContent: (() => void) | null = null;
@@ -75,9 +97,9 @@ const profile = computed(() => {
 
 function resetForm() {
   name.value = '';
-  remotes.value = [{ name: '', url: '', headers: [] }];
+  templateId.value = '';
+  remotes.value = [createEmptyRemote()];
   hook.value = EMPTY_PROFILE_HOOK_TEMPLATE;
-  keepSubscriptionGroupsAndRules.value = false;
   interval.value = '';
   cron.value = '';
 }
@@ -94,14 +116,13 @@ watch(
 watch(profile, (value) => {
   if (!value || initialized.value) return;
   name.value = value.name;
-  remotes.value = (
-    value.remotes.length
-      ? value.remotes
-      : [{ name: '', url: value.url, headers: value.headers }]
-  ).map((remote) => ({ ...remote, headers: [...remote.headers] }));
+  templateId.value = value.template_id;
+  remotes.value = value.remotes.map((remote) => ({
+    ...remote,
+    headers: [...remote.headers],
+    keep: { ...remote.keep },
+  }));
   hook.value = value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
-  keepSubscriptionGroupsAndRules.value =
-    value.keep_subscription_groups_and_rules;
   interval.value = value.update_interval_hours?.toString() ?? '';
   cron.value = value.update_cron ?? '';
   initialized.value = true;
@@ -195,18 +216,26 @@ onDeactivated(deactivateProfileEditDock);
 onBeforeUnmount(deactivateProfileEditDock);
 
 async function submit() {
+  if (!templateId.value) {
+    toast.error({ title: i18n.global.t('profiles.dialog.templateRequired') });
+    return;
+  }
   const creatingFirstProfile =
     !profileId.value && !profilesQuery.data.value?.current_profile_id;
   saving.value = true;
   try {
     const payload = {
       name: name.value,
-      source: remotes.value[0]?.url ?? '',
-      content: null,
-      headers: remotes.value[0]?.headers ?? [],
-      remotes: remotes.value.filter((remote) => remote.url.trim()),
+      template_id: templateId.value,
+      remotes: remotes.value
+        .filter((remote) => remote.url.trim())
+        .map((remote) => ({
+          ...remote,
+          name: remote.name.trim(),
+          url: remote.url.trim(),
+          headers: remote.headers.filter((header) => header.key.trim()),
+        })),
       hook: hook.value.trim() || null,
-      keep_subscription_groups_and_rules: keepSubscriptionGroupsAndRules.value,
       update_interval_hours: interval.value ? Number(interval.value) : null,
       update_cron: cron.value.trim() || null,
     };
@@ -232,16 +261,34 @@ async function submit() {
   }
 }
 
+async function createPresetTemplate() {
+  try {
+    const content = await getDefaultTemplate();
+    const template = await createTemplate({
+      name: i18n.global.t('templates.defaultName'),
+      content,
+    });
+    await templatesQuery.refetch();
+    templateId.value = template.id;
+  } catch (error) {
+    toast.error({
+      title:
+        error instanceof Error
+          ? error.message
+          : i18n.global.t('templates.createFailed'),
+    });
+  }
+}
+
 export default __render(() => (
   <ProfileDialog
     open
     editing={Boolean(profileId.value)}
     formName={name.value}
-    formSource=""
-    headers={[]}
     remotes={remotes.value}
+    templateId={templateId.value}
+    templates={templatesQuery.data.value ?? []}
     hook={hook.value}
-    keepSubscriptionGroupsAndRules={keepSubscriptionGroupsAndRules.value}
     updateIntervalHours={interval.value}
     updateCron={cron.value}
     submitLabel={i18n.global.t(
@@ -252,19 +299,16 @@ export default __render(() => (
     onNameInput={(value) => {
       name.value = value;
     }}
-    onSourceInput={() => {}}
     onRemotesChange={(value) => {
       remotes.value = value;
     }}
+    onTemplateIdChange={(value) => {
+      templateId.value = value;
+    }}
+    onCreatePresetTemplate={createPresetTemplate}
     onHookInput={(value) => {
       hook.value = value;
     }}
-    onKeepSubscriptionGroupsAndRulesChange={(value) => {
-      keepSubscriptionGroupsAndRules.value = value;
-    }}
-    onAddHeader={() => {}}
-    onHeaderChange={() => {}}
-    onRemoveHeader={() => {}}
     onUpdateCronInput={(value) => {
       cron.value = value;
       if (value.trim()) interval.value = '';

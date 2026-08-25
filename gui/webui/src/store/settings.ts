@@ -18,34 +18,24 @@ export const useSettingsStore = defineStore('settings', () => {
   const runtimeSettings = useRuntimeSettings();
   const runtimeStatus = useRuntimeStatus();
   const saving = ref(false);
-  const mixedPort = ref('7990');
   const appPort = ref('8787');
-  const allowLan = ref(false);
   const systemProxyEnabled = ref(false);
   const requestedAutoLaunchEnabled = ref(false);
   const kernelVersion = ref('--');
   const latestKernelVersion = ref('');
-  const initialMixedPort = ref('7990');
   const initialAppPort = ref('8787');
-  const initialAllowLan = ref(false);
   const initialSystemProxyEnabled = ref(false);
 
   const settingsDirty = computed(
     () =>
-      mixedPort.value !== initialMixedPort.value ||
       appPort.value !== initialAppPort.value ||
-      allowLan.value !== initialAllowLan.value ||
       systemProxyEnabled.value !== initialSystemProxyEnabled.value,
   );
 
   function syncFormWithSettings(settings: RuntimeSettings) {
-    mixedPort.value = String(settings.mixed_port);
     appPort.value = String(settings.app_port);
-    allowLan.value = settings.allow_lan;
     systemProxyEnabled.value = settings.system_proxy_enabled;
-    initialMixedPort.value = mixedPort.value;
     initialAppPort.value = appPort.value;
-    initialAllowLan.value = allowLan.value;
     initialSystemProxyEnabled.value = systemProxyEnabled.value;
   }
 
@@ -161,16 +151,7 @@ export const useSettingsStore = defineStore('settings', () => {
       return;
     }
 
-    const parsedPort = Number.parseInt(mixedPort.value, 10);
     const parsedAppPort = Number.parseInt(appPort.value, 10);
-    if (
-      !Number.isInteger(parsedPort) ||
-      parsedPort <= 0 ||
-      parsedPort > 65535
-    ) {
-      toast.error({ title: i18n.global.t('errors.invalidPort') });
-      return false;
-    }
     if (
       !Number.isInteger(parsedAppPort) ||
       parsedAppPort <= 0 ||
@@ -184,9 +165,7 @@ export const useSettingsStore = defineStore('settings', () => {
     saving.value = true;
     try {
       await saveSettings({
-        mixed_port: parsedPort,
         app_port: parsedAppPort,
-        allow_lan: allowLan.value,
         system_proxy_enabled: systemProxyEnabled.value,
       });
       const result = await runtimeSettings.refetch();
@@ -216,10 +195,6 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  function setMixedPort(value: string) {
-    mixedPort.value = value;
-  }
-
   function setAppPort(value: string) {
     appPort.value = value;
   }
@@ -231,11 +206,6 @@ export const useSettingsStore = defineStore('settings', () => {
     return false;
   }
 
-  async function updateAllowLan(value: boolean) {
-    allowLan.value = value;
-    return saveIfDirty();
-  }
-
   async function updateSystemProxyEnabled(value: boolean) {
     systemProxyEnabled.value = value;
     return saveIfDirty();
@@ -243,13 +213,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     appPort,
-    allowLan,
     autoLaunchEnabled,
     autoLaunchLoading,
     kernelVersion,
     latestKernelVersion,
     loading,
-    mixedPort,
     saving,
     settingsDirty,
     systemProxyEnabled,
@@ -258,8 +226,6 @@ export const useSettingsStore = defineStore('settings', () => {
     saveRuntimeSettings,
     setAutoLaunchEnabled,
     setAppPort,
-    setMixedPort,
-    updateAllowLan,
     updateSystemProxyEnabled,
   };
 });

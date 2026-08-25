@@ -5,11 +5,12 @@ import { Page, PageContent } from '@/components/page-content';
 import { CodeEditor } from '@/components/code-editor';
 import { Popover } from '@/components/popover';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
-import type { ProfileHeader } from '@/types';
-import type { ProfileRemote } from '@/types';
+import type { ProfileRemote, ProfileTemplate } from '@/types';
 import { useMounted } from '@vueuse/core';
 import {
   AddOutlined,
+  ArrowDownwardOutlined,
+  ArrowUpwardOutlined,
   CodeOutlined,
   DeleteOutlineOutlined,
   EditOutlined,
@@ -29,28 +30,20 @@ export interface ProfileDialogProps {
   open: boolean;
   editing: boolean;
   formName: string;
-  formSource: string;
-  headers: ProfileHeader[];
   remotes: ProfileRemote[];
+  templateId: string;
+  templates: ProfileTemplate[];
   hook: string;
-  keepSubscriptionGroupsAndRules: boolean;
   updateIntervalHours: string;
   updateCron: string;
   submitLabel: string;
   saving: boolean;
   onClose: () => void;
   onNameInput: (value: string) => void;
-  onSourceInput: (value: string) => void;
   onRemotesChange: (value: ProfileRemote[]) => void;
+  onTemplateIdChange: (value: string) => void;
+  onCreatePresetTemplate: () => void | Promise<void>;
   onHookInput: (value: string) => void;
-  onKeepSubscriptionGroupsAndRulesChange: (value: boolean) => void;
-  onAddHeader: () => void;
-  onHeaderChange: (
-    index: number,
-    key: keyof ProfileHeader,
-    value: string,
-  ) => void;
-  onRemoveHeader: (index: number) => void;
   onUpdateCronInput: (value: string) => void;
   onUpdateIntervalInput: (value: string) => void;
   onSubmit: () => void | Promise<void>;
@@ -94,6 +87,32 @@ function removeRemote(index: number) {
   expandedHeaderIndexes.value = new Set();
 }
 
+function moveRemote(index: number, direction: -1 | 1) {
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= props.remotes.length) return;
+  const next = [...props.remotes];
+  [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+  props.onRemotesChange(next);
+}
+
+function addRemote() {
+  props.onRemotesChange([
+    ...props.remotes,
+    {
+      name: '',
+      url: '',
+      headers: [],
+      format: 'clash',
+      keep: {
+        nodes: true,
+        groups: false,
+        route_final: false,
+        route_rules: false,
+      },
+    },
+  ]);
+}
+
 function addHeader(remoteIndex: number) {
   updateRemote(remoteIndex, {
     headers: [...props.remotes[remoteIndex].headers, { key: '', value: '' }],
@@ -107,7 +126,7 @@ function addHeader(remoteIndex: number) {
 function updateHeader(
   remoteIndex: number,
   headerIndex: number,
-  next: Partial<ProfileHeader>,
+  next: Partial<ProfileRemote['headers'][number]>,
 ) {
   updateRemote(remoteIndex, {
     headers: props.remotes[remoteIndex].headers.map((header, index) =>
@@ -198,31 +217,49 @@ export default __render<ProfileDialogProps>(() => {
                 placeholder={t('profiles.dialog.namePlaceholder')}
               />
             </label>
-            <label
-              class={[
-                'flex items-start gap-3 p-4',
-                'border-t border-outline-variant/50',
-              ]}
-            >
-              <input
-                class="mt-1 h-4 w-4 accent-primary"
-                type="checkbox"
-                checked={props.keepSubscriptionGroupsAndRules}
+            <div class="border-t border-outline-variant/50 p-4">
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium text-on-surface">
+                    {t('profiles.dialog.template')}
+                  </p>
+                  <p class="text-sm text-on-surface-variant">
+                    {t('profiles.dialog.templateDesc')}
+                  </p>
+                </div>
+                <Button
+                  shape="rect"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => void props.onCreatePresetTemplate()}
+                >
+                  <Icon class="text-base">
+                    <AddOutlined />
+                  </Icon>
+                  {t('profiles.dialog.createPresetTemplate')}
+                </Button>
+              </div>
+              <select
+                class={[
+                  'h-9 w-full rounded border border-outline-variant',
+                  'bg-surface px-3',
+                  'text-sm text-on-surface outline-none focus:border-primary',
+                ]}
+                value={props.templateId}
                 onChange={(event) =>
-                  props.onKeepSubscriptionGroupsAndRulesChange(
-                    (event.target as HTMLInputElement).checked,
+                  props.onTemplateIdChange(
+                    (event.target as HTMLSelectElement).value,
                   )
                 }
-              />
-              <span>
-                <span class="block text-sm font-medium text-on-surface">
-                  {t('profiles.dialog.keepSubscriptionGroupsAndRules')}
-                </span>
-                <span class="block text-sm text-on-surface-variant">
-                  {t('profiles.dialog.keepSubscriptionGroupsAndRulesDesc')}
-                </span>
-              </span>
-            </label>
+              >
+                <option value="">{t('profiles.dialog.selectTemplate')}</option>
+                {props.templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </section>
 
@@ -239,17 +276,7 @@ export default __render<ProfileDialogProps>(() => {
                 {t('profiles.dialog.remoteSources')}
               </h3>
             </div>
-            <Button
-              shape="rect"
-              size="xs"
-              variant="ghost"
-              onClick={() =>
-                props.onRemotesChange([
-                  ...props.remotes,
-                  { name: '', url: '', headers: [] },
-                ])
-              }
-            >
+            <Button shape="rect" size="xs" variant="ghost" onClick={addRemote}>
               <Icon class="text-base">
                 <AddOutlined />
               </Icon>
@@ -285,6 +312,42 @@ export default __render<ProfileDialogProps>(() => {
                         {remoteSummary(remote)}
                       </p>
                     </div>
+                    <Button
+                      aria-label={t('profiles.dialog.moveRemoteUp', {
+                        name: remoteLabel(remote, index),
+                      })}
+                      iconOnly
+                      shape="square"
+                      size="xs"
+                      tooltip={t('profiles.dialog.moveRemoteUp', {
+                        name: remoteLabel(remote, index),
+                      })}
+                      variant="ghost"
+                      disabled={index === 0}
+                      onClick={() => moveRemote(index, -1)}
+                    >
+                      <Icon class="text-base">
+                        <ArrowUpwardOutlined />
+                      </Icon>
+                    </Button>
+                    <Button
+                      aria-label={t('profiles.dialog.moveRemoteDown', {
+                        name: remoteLabel(remote, index),
+                      })}
+                      iconOnly
+                      shape="square"
+                      size="xs"
+                      tooltip={t('profiles.dialog.moveRemoteDown', {
+                        name: remoteLabel(remote, index),
+                      })}
+                      variant="ghost"
+                      disabled={index === props.remotes.length - 1}
+                      onClick={() => moveRemote(index, 1)}
+                    >
+                      <Icon class="text-base">
+                        <ArrowDownwardOutlined />
+                      </Icon>
+                    </Button>
                     <Button
                       aria-label={t('profiles.dialog.removeRemote', {
                         name: remoteLabel(remote, index),
@@ -346,6 +409,141 @@ export default __render<ProfileDialogProps>(() => {
                         }
                       />
                     </label>
+                    <label class="block">
+                      <span class="mb-1 block text-xs font-medium text-on-surface-variant">
+                        {t('profiles.dialog.remoteFormat')}
+                      </span>
+                      <select
+                        class={[
+                          'h-9 w-full rounded border border-outline-variant',
+                          'bg-surface px-3',
+                          'text-sm text-on-surface outline-none focus:border-primary',
+                        ]}
+                        value={remote.format}
+                        onChange={(event) =>
+                          updateRemote(index, {
+                            format: (event.target as HTMLSelectElement)
+                              .value as ProfileRemote['format'],
+                          })
+                        }
+                      >
+                        <option value="clash">
+                          {t('profiles.dialog.remoteFormatClash')}
+                        </option>
+                        <option value="singbox">
+                          {t('profiles.dialog.remoteFormatSingbox')}
+                        </option>
+                      </select>
+                    </label>
+                    <div class="rounded border border-outline-variant/50 bg-surface p-3">
+                      <p class="mb-2 text-xs font-medium text-on-surface-variant">
+                        {t('profiles.dialog.keepFields')}
+                      </p>
+                      <div class="space-y-2">
+                        <label class="flex items-center gap-2 text-sm text-on-surface">
+                          <input
+                            class="h-4 w-4 accent-primary"
+                            type="checkbox"
+                            checked={remote.keep.nodes}
+                            onChange={(event) =>
+                              updateRemote(index, {
+                                keep: {
+                                  ...remote.keep,
+                                  nodes: (event.target as HTMLInputElement)
+                                    .checked,
+                                },
+                              })
+                            }
+                          />
+                          {t(
+                            remote.format === 'clash'
+                              ? 'profiles.dialog.keepClashProxies'
+                              : 'profiles.dialog.keepSingboxOutbounds',
+                          )}
+                        </label>
+                        {remote.format === 'clash' ? (
+                          <>
+                            <label class="flex items-center gap-2 text-sm text-on-surface">
+                              <input
+                                class="h-4 w-4 accent-primary"
+                                type="checkbox"
+                                checked={remote.keep.groups}
+                                onChange={(event) =>
+                                  updateRemote(index, {
+                                    keep: {
+                                      ...remote.keep,
+                                      groups: (event.target as HTMLInputElement)
+                                        .checked,
+                                    },
+                                  })
+                                }
+                              />
+                              {t('profiles.dialog.keepClashProxyGroups')}
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-on-surface">
+                              <input
+                                class="h-4 w-4 accent-primary"
+                                type="checkbox"
+                                checked={remote.keep.route_rules}
+                                onChange={(event) =>
+                                  updateRemote(index, {
+                                    keep: {
+                                      ...remote.keep,
+                                      route_rules: (
+                                        event.target as HTMLInputElement
+                                      ).checked,
+                                    },
+                                  })
+                                }
+                              />
+                              {t('profiles.dialog.keepClashRules')}
+                            </label>
+                          </>
+                        ) : (
+                          <div class="ml-3 space-y-2 border-l border-outline-variant pl-3">
+                            <p class="text-xs font-medium text-on-surface-variant">
+                              {t('profiles.dialog.keepSingboxRoute')}
+                            </p>
+                            <label class="flex items-center gap-2 text-sm text-on-surface">
+                              <input
+                                class="h-4 w-4 accent-primary"
+                                type="checkbox"
+                                checked={remote.keep.route_final}
+                                onChange={(event) =>
+                                  updateRemote(index, {
+                                    keep: {
+                                      ...remote.keep,
+                                      route_final: (
+                                        event.target as HTMLInputElement
+                                      ).checked,
+                                    },
+                                  })
+                                }
+                              />
+                              {t('profiles.dialog.keepSingboxFinal')}
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-on-surface">
+                              <input
+                                class="h-4 w-4 accent-primary"
+                                type="checkbox"
+                                checked={remote.keep.route_rules}
+                                onChange={(event) =>
+                                  updateRemote(index, {
+                                    keep: {
+                                      ...remote.keep,
+                                      route_rules: (
+                                        event.target as HTMLInputElement
+                                      ).checked,
+                                    },
+                                  })
+                                }
+                              />
+                              {t('profiles.dialog.keepSingboxRules')}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div class="border-t border-outline-variant/50">

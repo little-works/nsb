@@ -1,7 +1,7 @@
 use chrono::Local;
 use serde_json::{Map, Value, json};
 
-use super::{RemoteSnapshot, RemoteSource};
+use super::{RemoteFormat, RemoteSnapshot, RemoteSource};
 
 const RESERVED_TAGS: &[&str] = &["PROXY", "direct", "block"];
 const HEALTHCHECK_URL: &str = "https://www.gstatic.com/generate_204";
@@ -10,7 +10,6 @@ pub fn parse_remote(
     remote: &RemoteSource,
     body: &str,
     multi_remote: bool,
-    keep_groups_and_rules: bool,
 ) -> Result<RemoteSnapshot, String> {
     let value: Value = serde_json::from_str(body).or_else(|json_error| {
         serde_yaml::from_str(body).map_err(|yaml_error| {
@@ -20,10 +19,9 @@ pub fn parse_remote(
             )
         })
     })?;
-    let mut snapshot = if value.get("outbounds").is_some() {
-        parse_singbox(remote, value, multi_remote, keep_groups_and_rules)?
-    } else {
-        parse_clash(remote, value, multi_remote, keep_groups_and_rules)?
+    let mut snapshot = match remote.format {
+        RemoteFormat::Clash => parse_clash(remote, value, multi_remote)?,
+        RemoteFormat::Singbox => parse_singbox(remote, value, multi_remote)?,
     };
     snapshot.updated_at = u64::try_from(Local::now().timestamp()).unwrap_or_default();
     Ok(snapshot)
@@ -33,7 +31,6 @@ fn parse_singbox(
     remote: &RemoteSource,
     value: Value,
     multi: bool,
-    keep: bool,
 ) -> Result<RemoteSnapshot, String> {
     let outbounds = value
         .get("outbounds")
@@ -51,13 +48,16 @@ fn parse_singbox(
         }
         let mut item = normalize_tag(outbound.clone(), remote, multi)?;
         rewrite_source_references(&mut item, remote, multi);
-        if keep && matches!(kind, "selector" | "urltest" | "fallback" | "loadbalance") {
+        if remote.keep.groups && matches!(kind, "selector" | "urltest" | "fallback" | "loadbalance")
+        {
             groups.push(item);
-        } else if !matches!(kind, "selector" | "urltest" | "fallback" | "loadbalance") {
+        } else if remote.keep.nodes
+            && !matches!(kind, "selector" | "urltest" | "fallback" | "loadbalance")
+        {
             nodes.push(item);
         }
     }
-    let rules = if keep {
+    let rules = if remote.keep.route_rules {
         value
             .pointer("/route/rules")
             .and_then(Value::as_array)
@@ -72,15 +72,17 @@ fn parse_singbox(
     } else {
         Vec::new()
     };
-    Ok(snapshot(remote, nodes, groups, rules, Vec::new()))
+    let mut snapshot = snapshot(remote, nodes, groups, rules, Vec::new());
+    if remote.keep.route_final {
+        snapshot.route_final = value
+            .pointer("/route/final")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+    }
+    Ok(snapshot)
 }
 
-fn parse_clash(
-    remote: &RemoteSource,
-    value: Value,
-    multi: bool,
-    keep: bool,
-) -> Result<RemoteSnapshot, String> {
+fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<RemoteSnapshot, String> {
     let mut nodes = Vec::new();
     let mut groups = Vec::new();
     let mut warnings = Vec::new();
@@ -126,9 +128,11 @@ fn parse_clash(
         rename(&mut item, "cipher", "method");
         normalize_proxy(&mut item, kind);
         item.insert("type".into(), Value::String(kind.into()));
-        nodes.push(normalize_tag(Value::Object(item), remote, multi)?);
+        if remote.keep.nodes {
+            nodes.push(normalize_tag(Value::Object(item), remote, multi)?);
+        }
     }
-    if keep {
+    if remote.keep.groups {
         for group in value
             .get("proxy-groups")
             .and_then(Value::as_array)
@@ -140,7 +144,7 @@ fn parse_clash(
             }
         }
     }
-    let rules = if keep {
+    let rules = if remote.keep.route_rules {
         value
             .get("rules")
             .and_then(Value::as_array)
@@ -167,6 +171,7 @@ fn snapshot(
         proxy_nodes,
         proxy_groups,
         route_rules,
+        route_final: None,
         warnings,
         updated_at: 0,
     }

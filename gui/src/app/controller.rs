@@ -5,8 +5,8 @@ use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::system_proxy_host::SystemProxyHost;
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::{
-    AppState, KernelRuntimeSource, ProfileHeader, ProfileItem, ProfileKind, ProfileRemote,
-    current_timestamp, generate_profile_id,
+    AppState, KernelRuntimeSource, ProfileHeader, ProfileItem, ProfileRemote, current_timestamp,
+    generate_profile_id,
 };
 
 const PROFILE_USER_AGENT: &str = concat!(
@@ -17,12 +17,6 @@ const PROFILE_USER_AGENT: &str = concat!(
 pub struct AppController {
     pub state: AppState,
     kernel_started_by_this_instance: bool,
-}
-
-struct PreparedProfile {
-    kind: ProfileKind,
-    url: String,
-    runtime_content: Option<String>,
 }
 
 impl AppController {
@@ -44,11 +38,6 @@ impl AppController {
         self.state.kernel.config_path = singbox_host.display_config_path();
 
         for profile in &mut self.state.gui_config.profiles {
-            profile.kind = if profile.url.trim().is_empty() {
-                ProfileKind::File
-            } else {
-                ProfileItem::source_kind(&profile.url)
-            };
             if profile.id.trim().is_empty() {
                 profile.id = generate_profile_id();
             }
@@ -98,10 +87,8 @@ impl AppController {
                 self.state.kernel.controller_addr = launch_config.external_controller;
                 self.state.kernel.controller_secret = launch_config.secret;
                 info!(
-                    "kernel started, controller={}, mixed_port={}, allow_lan={}",
-                    self.state.kernel.controller_addr,
-                    self.state.gui_config.mixed_port,
-                    self.state.gui_config.allow_lan
+                    "kernel started, controller={}",
+                    self.state.kernel.controller_addr
                 );
                 self.state.mark_kernel_running();
                 self.kernel_started_by_this_instance = true;
@@ -146,38 +133,22 @@ impl AppController {
     pub async fn create_profile(
         &mut self,
         name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
         update_interval_hours: Option<u32>,
         update_cron: Option<String>,
-        profile_host: &ProfileHost,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         let name = Self::validate_profile_name(name)?;
         let id = self.next_profile_id();
-        Self::validate_headers(&headers)?;
         Self::validate_schedule(update_interval_hours, update_cron.as_deref())?;
-        let prepared = Self::prepare_profile(None, source, content)?;
-        if let Some(runtime_content) = prepared.runtime_content.as_deref() {
-            profile_host.save_runtime(&id, runtime_content).await?;
-        }
-        let next_update_at = Self::next_update_at(
-            &prepared.kind,
-            update_interval_hours,
-            update_cron.as_deref(),
-        );
+        let next_update_at = Self::next_update_at(update_interval_hours, update_cron.as_deref());
 
         let item = ProfileItem {
             id: id.clone(),
             name,
-            kind: prepared.kind,
-            url: prepared.url,
+            template_id: String::new(),
             updated_at: current_timestamp(),
-            headers,
             remotes: Vec::new(),
             hook: None,
-            keep_subscription_groups_and_rules: false,
             update_interval_hours,
             update_cron,
             next_update_at,
@@ -194,12 +165,8 @@ impl AppController {
         &mut self,
         id: String,
         name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
         update_interval_hours: Option<u32>,
         update_cron: Option<String>,
-        profile_host: &ProfileHost,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         let id = id.trim().to_string();
@@ -207,8 +174,6 @@ impl AppController {
             return Err(String::from("Profile ID cannot be empty."));
         }
         let name = Self::validate_profile_name(name)?;
-        Self::validate_headers(&headers)?;
-
         let existing_index = self
             .state
             .gui_config
@@ -217,27 +182,13 @@ impl AppController {
             .position(|profile| profile.id == id)
             .ok_or_else(|| String::from("Profile to update was not found."))?;
 
-        let existing = self.state.gui_config.profiles[existing_index].clone();
         Self::validate_schedule(update_interval_hours, update_cron.as_deref())?;
-        let prepared = Self::prepare_profile(Some(&existing), source, content)?;
-        if let Some(runtime_content) = prepared.runtime_content.as_deref() {
-            profile_host
-                .save_runtime(&existing.id, runtime_content)
-                .await?;
-        }
-
         let target = &mut self.state.gui_config.profiles[existing_index];
         target.name = name;
-        target.kind = prepared.kind;
-        target.url = prepared.url;
-        target.headers = headers;
         target.update_interval_hours = update_interval_hours;
         target.update_cron = update_cron;
-        target.next_update_at = Self::next_update_at(
-            &target.kind,
-            target.update_interval_hours,
-            target.update_cron.as_deref(),
-        );
+        target.next_update_at =
+            Self::next_update_at(target.update_interval_hours, target.update_cron.as_deref());
         target.updated_at = current_timestamp();
         target.revision = target.revision.saturating_add(1);
 
@@ -289,9 +240,9 @@ impl AppController {
     pub async fn configure_profile_sources(
         &mut self,
         id: &str,
+        template_id: String,
         remotes: Vec<ProfileRemote>,
         hook: Option<String>,
-        keep_subscription_groups_and_rules: bool,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         for remote in &remotes {
@@ -319,17 +270,21 @@ impl AppController {
             .iter()
             .position(|item| item.id == profile.id)
             .expect("profile exists");
-        let target = &mut self.state.gui_config.profiles[index];
-        if !remotes.is_empty() {
-            target.url = remotes[0].url.clone();
-            target.headers = remotes[0].headers.clone();
-            target.kind = ProfileKind::Url;
-            target.remotes = remotes;
+        if !self
+            .state
+            .gui_config
+            .templates
+            .iter()
+            .any(|template| template.id == template_id)
+        {
+            return Err(String::from("Selected Template was not found."));
         }
+        let target = &mut self.state.gui_config.profiles[index];
+        target.template_id = template_id;
+        target.remotes = remotes;
         target.hook = hook
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
-        target.keep_subscription_groups_and_rules = keep_subscription_groups_and_rules;
         target.revision = target.revision.saturating_add(1);
         app_config_store.save(&self.state.gui_config).await
     }
@@ -424,25 +379,58 @@ impl AppController {
 
     pub async fn save_runtime_settings(
         &mut self,
-        mixed_port: u16,
         app_port: u16,
-        allow_lan: bool,
         system_proxy_enabled: bool,
+        profile_host: &ProfileHost,
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
-        if mixed_port == 0 {
-            return Err(String::from("The mixed inbound port cannot be 0."));
-        }
         if app_port == 0 {
             return Err(String::from("The application port cannot be 0."));
         }
 
-        SystemProxyHost::configure(system_proxy_enabled, mixed_port)?;
-        self.state.gui_config.mixed_port = mixed_port;
+        let endpoint = self.current_mixed_endpoint(profile_host).await?;
+        SystemProxyHost::configure(system_proxy_enabled, endpoint.as_deref())?;
         self.state.gui_config.app_port = app_port;
-        self.state.gui_config.allow_lan = allow_lan;
         self.state.gui_config.system_proxy_enabled = system_proxy_enabled;
         app_config_store.save(&self.state.gui_config).await
+    }
+
+    async fn current_mixed_endpoint(
+        &self,
+        profile_host: &ProfileHost,
+    ) -> Result<Option<String>, String> {
+        let Some(profile) = self.current_profile() else {
+            return Ok(None);
+        };
+        let content = profile_host.read_runtime(&profile.id).await?;
+        let mut value: serde_json::Value = serde_json::from_str(&content).map_err(|error| {
+            format!("Failed to parse active Profile runtime configuration: {error}")
+        })?;
+        if let Some(hook) = profile
+            .hook
+            .as_deref()
+            .filter(|hook| !hook.trim().is_empty())
+        {
+            value = nsb_core::run_finalize_hook(hook, value)?;
+        }
+        Ok(value
+            .get("inbounds")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|inbound| {
+                inbound.get("type").and_then(serde_json::Value::as_str) == Some("mixed")
+            })
+            .and_then(|inbound| {
+                let host = inbound.get("listen").and_then(serde_json::Value::as_str)?;
+                let port = inbound
+                    .get("listen_port")
+                    .and_then(serde_json::Value::as_u64)?;
+                if port == 0 || port > u64::from(u16::MAX) {
+                    return None;
+                }
+                Some(format!("{host}:{port}"))
+            }))
     }
 
     pub async fn save_app_language(
@@ -516,26 +504,10 @@ impl AppController {
             return Ok(path);
         }
 
-        match &profile.kind {
-            ProfileKind::Url => {
-                let body = Self::download_profile(&profile.url, &profile.headers).await?;
-                profile_host.save_runtime(&profile.id, &body).await?;
-                if let Some(stored_profile) = self
-                    .state
-                    .gui_config
-                    .profiles
-                    .iter_mut()
-                    .find(|stored_profile| stored_profile.id == profile.id)
-                {
-                    stored_profile.updated_at = current_timestamp();
-                }
-                app_config_store.save(&self.state.gui_config).await?;
-                Ok(path)
-            }
-            ProfileKind::File => Err(String::from(
-                "Local Profile cache does not exist. Upload the file contents again.",
-            )),
-        }
+        let _ = app_config_store;
+        Err(String::from(
+            "Profile runtime is missing. Refresh the Profile before activation.",
+        ))
     }
 
     fn normalize_current_profile(&mut self) {
@@ -574,45 +546,6 @@ impl AppController {
         Ok(name)
     }
 
-    fn prepare_profile(
-        existing: Option<&ProfileItem>,
-        source: String,
-        content: Option<String>,
-    ) -> Result<PreparedProfile, String> {
-        let source = source.trim().to_string();
-        let content = content
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
-
-        if !source.is_empty() {
-            return Ok(PreparedProfile {
-                kind: ProfileKind::Url,
-                url: source,
-                runtime_content: None,
-            });
-        }
-
-        if let Some(content) = content {
-            return Ok(PreparedProfile {
-                kind: ProfileKind::File,
-                url: String::new(),
-                runtime_content: Some(content),
-            });
-        }
-
-        if existing.is_some_and(|profile| matches!(profile.kind, ProfileKind::File)) {
-            return Ok(PreparedProfile {
-                kind: ProfileKind::File,
-                url: String::new(),
-                runtime_content: None,
-            });
-        }
-
-        Err(String::from(
-            "URL cannot be empty; upload the file contents directly for a local file.",
-        ))
-    }
-
     fn validate_schedule(
         update_interval_hours: Option<u32>,
         update_cron: Option<&str>,
@@ -635,15 +568,7 @@ impl AppController {
         Ok(())
     }
 
-    fn next_update_at(
-        kind: &ProfileKind,
-        update_interval_hours: Option<u32>,
-        update_cron: Option<&str>,
-    ) -> u64 {
-        if !matches!(kind, ProfileKind::Url) {
-            return 0;
-        }
-
+    fn next_update_at(update_interval_hours: Option<u32>, update_cron: Option<&str>) -> u64 {
         let now = current_timestamp();
         if let Some(hours) = update_interval_hours {
             return now.saturating_add(u64::from(hours).saturating_mul(60 * 60));

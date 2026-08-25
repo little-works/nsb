@@ -8,14 +8,13 @@ import {
   WarningAmberOutlined,
 } from '@vicons/material';
 import { Tooltip } from '@/components/tooltip';
-import { useRuntimeSettings, useRuntimeStatus } from '@/store/app';
+import { useRuntimeStatus } from '@/store/app';
 import { useScoreStreamData } from '@/hooks/use-score-stream';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/icon';
 const { traffic } = useScoreStreamData();
 const runtimeStatus = useRuntimeStatus();
-const runtimeSettings = useRuntimeSettings();
 const { t } = useI18n();
 const coreStatus = computed(() => {
   const installed = runtimeStatus.data.value?.kernel.installed ?? true;
@@ -44,10 +43,6 @@ const coreStatus = computed(() => {
         href: undefined,
         tooltip: undefined,
       };
-});
-const mixedPort = computed(() => {
-  const port = runtimeSettings.data.value?.mixed_port;
-  return port == null ? '--' : String(port);
 });
 
 function formatBytes(value: number) {
@@ -129,10 +124,6 @@ export default __render(() => {
               {formatBytes(traffic.value.up)}/s
             </p>
           </div>
-        </div>
-        <div class="flex h-6 items-center justify-between rounded bg-surface-container-high px-2 text-xs text-on-surface-variant">
-          <span>Mixed Port</span>
-          <span class="font-mono text-on-surface">{mixedPort.value}</span>
         </div>
       </div>
     </section>

@@ -10,6 +10,7 @@ import {
   HomeFilled,
   HomeOutlined,
   HubOutlined,
+  LayersOutlined,
   SettingsFilled,
   SettingsOutlined,
   SyncFilled,
@@ -41,6 +42,14 @@ const navItems: NavItem[] = [
     caption: 'Profile Management',
     icon: SyncOutlined,
     activeIcon: SyncFilled,
+  },
+  {
+    key: AppPageType.Templates,
+    href: '/webui/templates',
+    label: 'Templates',
+    caption: 'Template Management',
+    icon: LayersOutlined,
+    activeIcon: LayersOutlined,
   },
   {
     key: AppPageType.Logs,
@@ -76,7 +85,7 @@ export default __render<NsbLayoutProps>(() => {
     ...item,
     label: t(`nav.${item.key.toLowerCase()}`),
     caption: t(
-      `nav.${item.key.toLowerCase()}${item.key === AppPageType.Proxies ? 'Caption' : item.key === AppPageType.Profiles ? 'Caption' : item.key === AppPageType.Logs ? 'Caption' : item.key === AppPageType.Connections ? 'Caption' : ''}`,
+      `nav.${item.key.toLowerCase()}${item.key === AppPageType.Proxies || item.key === AppPageType.Profiles || item.key === AppPageType.Templates || item.key === AppPageType.Logs || item.key === AppPageType.Connections ? 'Caption' : ''}`,
     ),
   }));
   return (

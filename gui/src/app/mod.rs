@@ -109,17 +109,10 @@ impl DesktopApp {
                             let result = {
                                 let mut guard = runtime.lock().await;
                                 let config = &guard.controller.state.gui_config;
-                                let mixed_port = config.mixed_port;
                                 let app_port = config.app_port;
-                                let allow_lan = config.allow_lan;
                                 let system_proxy_enabled = !config.system_proxy_enabled;
                                 guard
-                                    .save_runtime_settings(
-                                        mixed_port,
-                                        app_port,
-                                        allow_lan,
-                                        system_proxy_enabled,
-                                    )
+                                    .save_runtime_settings(app_port, system_proxy_enabled)
                                     .await
                                     .map(|()| system_proxy_enabled)
                             };

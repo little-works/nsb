@@ -2,18 +2,12 @@ import { __render } from '@/shared/helpter';
 import { Button } from '@/components/button';
 import { CodeEditor } from '@/components/code-editor';
 import { Dialog } from '@/components/dialog';
-import type { ProfileSummary } from '@/types';
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, ref, shallowRef, useSlots, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { i18n } from '@/i18n';
 
 type JsonValue =
-  | boolean
-  | null
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
 type JsonPathSegment = number | string;
 
 interface NavigationEntry {
@@ -23,7 +17,9 @@ interface NavigationEntry {
 
 export interface ProfileNodeEditorProps {
   open: boolean;
-  profile: ProfileSummary | null;
+  title: string;
+  description?: string;
+  saveLabel: string;
   content: string;
   loading: boolean;
   saving: boolean;
@@ -33,6 +29,7 @@ export interface ProfileNodeEditorProps {
 }
 
 const props = defineProps<ProfileNodeEditorProps>();
+const slots = useSlots();
 const rootValue = shallowRef<JsonValue | undefined>(undefined);
 const selectedPath = ref<JsonPathSegment[]>([]);
 const editorValue = ref('');
@@ -202,17 +199,14 @@ export default __render<ProfileNodeEditorProps>(() => {
     <Dialog
       closeDisabled={props.saving}
       contentClass="flex h-[70vh] max-w-6xl flex-col"
-      description={
-        props.profile
-          ? t('editor.description', { name: props.profile.name })
-          : ''
-      }
+      description={props.description ?? ''}
       open={props.open}
-      title={t('editor.title')}
+      title={props.title}
       onClose={props.onClose}
     >
-      {props.profile ? (
+      {props.open ? (
         <>
+          {slots.form?.()}
           <div class="min-h-0 flex flex-1 overflow-hidden rounded border border-outline-variant">
             <aside class="flex w-48 shrink-0 flex-col border-r border-outline-variant bg-surface-container-low">
               <nav
@@ -311,7 +305,7 @@ export default __render<ProfileNodeEditorProps>(() => {
               variant="solid"
               onClick={props.onSave}
             >
-              {t('editor.saveNodes')}
+              {props.saveLabel}
             </Button>
           </div>
         </>

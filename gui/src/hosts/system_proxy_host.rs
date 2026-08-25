@@ -4,13 +4,13 @@ use crate::utils::command::std_command;
 pub struct SystemProxyHost;
 
 impl SystemProxyHost {
-    pub fn configure(enabled: bool, mixed_port: u16) -> Result<(), String> {
+    pub fn configure(enabled: bool, mixed_endpoint: Option<&str>) -> Result<(), String> {
         #[cfg(windows)]
         {
             const INTERNET_SETTINGS: &str =
                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
             let server = if enabled {
-                format!("127.0.0.1:{mixed_port}")
+                mixed_endpoint.ok_or_else(|| String::from("The active Template does not define a valid mixed inbound for system proxy."))?.to_string()
             } else {
                 String::new()
             };
@@ -38,7 +38,7 @@ impl SystemProxyHost {
                     "Configuring the system proxy is not supported on this platform.",
                 ));
             }
-            let _ = mixed_port;
+            let _ = mixed_endpoint;
             Ok(())
         }
     }

@@ -10,9 +10,7 @@ use super::{ApiResponse, simple_response};
 
 #[derive(Debug, Deserialize)]
 pub struct SaveSettingsRequest {
-    mixed_port: u16,
     app_port: u16,
-    allow_lan: bool,
     #[serde(default)]
     system_proxy_enabled: bool,
 }
@@ -29,18 +27,14 @@ pub struct SaveAppLanguageRequest {
 
 #[derive(Clone, Serialize)]
 pub struct SettingsResponse {
-    pub mixed_port: u16,
     pub app_port: u16,
-    pub allow_lan: bool,
     pub system_proxy_enabled: bool,
     pub app_language: AppLanguage,
 }
 
 fn settings_response(config: &AppConfig) -> SettingsResponse {
     SettingsResponse {
-        mixed_port: config.mixed_port,
         app_port: config.app_port,
-        allow_lan: config.allow_lan,
         system_proxy_enabled: config.system_proxy_enabled,
         app_language: config.app_language,
     }
@@ -70,12 +64,7 @@ pub async fn save_settings(
 ) -> Json<ApiResponse<SettingsResponse>> {
     let mut guard = ctx.runtime.lock().await;
     match guard
-        .save_runtime_settings(
-            request.mixed_port,
-            request.app_port,
-            request.allow_lan,
-            request.system_proxy_enabled,
-        )
+        .save_runtime_settings(request.app_port, request.system_proxy_enabled)
         .await
     {
         Ok(()) => {

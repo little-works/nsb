@@ -6,8 +6,7 @@ use crate::app::controller::AppController;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::KernelStatus;
-use crate::state::ProfileHeader;
-use nsb_core::{RemoteSource, build_config, parse_remote};
+use nsb_core::{RemoteFormat, RemoteKeepFields, RemoteSource, build_config, parse_remote};
 use tokio::sync::Mutex;
 
 pub type SharedGuiRuntime = Arc<Mutex<GuiRuntime>>;
@@ -85,21 +84,14 @@ impl GuiRuntime {
     pub async fn create_profile(
         &mut self,
         name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
         update_interval_hours: Option<u32>,
         update_cron: Option<String>,
     ) -> Result<(), String> {
         self.controller
             .create_profile(
                 name,
-                source,
-                content,
-                headers,
                 update_interval_hours,
                 update_cron,
-                &self.profile_host,
                 &self.app_config_store,
             )
             .await
@@ -109,9 +101,6 @@ impl GuiRuntime {
         &mut self,
         id: String,
         name: String,
-        source: String,
-        content: Option<String>,
-        headers: Vec<ProfileHeader>,
         update_interval_hours: Option<u32>,
         update_cron: Option<String>,
     ) -> Result<(), String> {
@@ -119,12 +108,8 @@ impl GuiRuntime {
             .update_profile(
                 id,
                 name,
-                source,
-                content,
-                headers,
                 update_interval_hours,
                 update_cron,
-                &self.profile_host,
                 &self.app_config_store,
             )
             .await
@@ -166,35 +151,17 @@ impl GuiRuntime {
 
     pub async fn save_runtime_settings(
         &mut self,
-        mixed_port: u16,
         app_port: u16,
-        allow_lan: bool,
         system_proxy_enabled: bool,
     ) -> Result<(), String> {
-        let should_restart_kernel = self.controller.state.kernel.status == KernelStatus::Running
-            && (self.controller.state.gui_config.mixed_port != mixed_port
-                || self.controller.state.gui_config.allow_lan != allow_lan);
-
         self.controller
             .save_runtime_settings(
-                mixed_port,
                 app_port,
-                allow_lan,
                 system_proxy_enabled,
+                &self.profile_host,
                 &self.app_config_store,
             )
             .await?;
-
-        if should_restart_kernel {
-            self.controller.stop_kernel(&mut self.singbox_host).await?;
-            self.controller
-                .start_kernel(
-                    &mut self.singbox_host,
-                    &self.profile_host,
-                    &self.app_config_store,
-                )
-                .await?;
-        }
 
         Ok(())
     }
@@ -254,75 +221,103 @@ pub async fn update_profile_runtime(
         let guard = runtime.lock().await;
         guard.profile_host.clone()
     };
-    let result = match profile.kind {
-        crate::state::ProfileKind::Url => {
-            let remotes = profile.normalized_remotes();
-            let multi_remote = remotes.len() > 1;
-            let mut snapshots = Vec::new();
-            for remote in &remotes {
-                let snapshot = match AppController::download_profile(&remote.url, &remote.headers)
-                    .await
-                {
-                    Ok(content) => {
-                        let snapshot = parse_remote(
-                            &RemoteSource {
-                                name: remote.name.clone(),
-                                url: remote.url.clone(),
+    let result = {
+        let template = {
+            let guard = runtime.lock().await;
+            guard
+                .controller
+                .state
+                .gui_config
+                .templates
+                .iter()
+                .find(|item| item.id == profile.template_id)
+                .map(|item| item.content.clone())
+        }
+        .ok_or_else(|| String::from("Profile references a missing Template."))?;
+        let remotes = profile.remotes.clone();
+        let multi_remote = remotes.len() > 1;
+        let mut snapshots = Vec::new();
+        for remote in &remotes {
+            let snapshot = match AppController::download_profile(&remote.url, &remote.headers).await
+            {
+                Ok(content) => {
+                    let snapshot = parse_remote(
+                        &RemoteSource {
+                            name: remote.name.clone(),
+                            url: remote.url.clone(),
+                            format: match remote.format {
+                                crate::state::ProfileRemoteFormat::Clash => RemoteFormat::Clash,
+                                crate::state::ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
                             },
-                            &content,
-                            multi_remote,
-                            profile.keep_subscription_groups_and_rules,
-                        )?;
-                        for warning in &snapshot.warnings {
-                            log::warn!("{warning}");
-                        }
-                        profile_host
-                            .save_remote_raw(&profile.id, &remote.name, &content)
-                            .await?;
-                        log::info!(
-                            "Remote fetch succeeded: profile_id={} remote={} url={}",
-                            profile.id,
-                            remote.name,
-                            remote.url
-                        );
-                        snapshot
+                            keep: RemoteKeepFields {
+                                nodes: remote.keep.nodes,
+                                groups: remote.keep.groups,
+                                route_final: remote.keep.route_final,
+                                route_rules: remote.keep.route_rules,
+                            },
+                        },
+                        &content,
+                        multi_remote,
+                    )?;
+                    for warning in &snapshot.warnings {
+                        log::warn!("{warning}");
                     }
-                    Err(error) => {
-                        log::warn!(
-                            "Remote fetch failed: profile_id={} remote={} url={} error={error}; attempting to use the most recent raw cache",
-                            profile.id,
-                            remote.name,
-                            remote.url
-                        );
-                        let Some(cached) = profile_host
-                            .read_remote_raw(&profile.id, &remote.name)
-                            .await?
-                        else {
-                            return Err(format!(
-                                "Remote {} refresh failed and no cache is available: {error}",
-                                remote.name
-                            ));
-                        };
-                        parse_remote(
-                            &RemoteSource {
-                                name: remote.name.clone(),
-                                url: remote.url.clone(),
+                    profile_host
+                        .save_remote_raw(&profile.id, &remote.name, &content)
+                        .await?;
+                    log::info!(
+                        "Remote fetch succeeded: profile_id={} remote={} url={}",
+                        profile.id,
+                        remote.name,
+                        remote.url
+                    );
+                    snapshot
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Remote fetch failed: profile_id={} remote={} url={} error={error}; attempting to use the most recent raw cache",
+                        profile.id,
+                        remote.name,
+                        remote.url
+                    );
+                    let Some(cached) = profile_host
+                        .read_remote_raw(&profile.id, &remote.name)
+                        .await?
+                    else {
+                        return Err(format!(
+                            "Remote {} refresh failed and no cache is available: {error}",
+                            remote.name
+                        ));
+                    };
+                    parse_remote(
+                        &RemoteSource {
+                            name: remote.name.clone(),
+                            url: remote.url.clone(),
+                            format: match remote.format {
+                                crate::state::ProfileRemoteFormat::Clash => RemoteFormat::Clash,
+                                crate::state::ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
                             },
-                            &cached,
-                            multi_remote,
-                            profile.keep_subscription_groups_and_rules,
+                            keep: RemoteKeepFields {
+                                nodes: remote.keep.nodes,
+                                groups: remote.keep.groups,
+                                route_final: remote.keep.route_final,
+                                route_rules: remote.keep.route_rules,
+                            },
+                        },
+                        &cached,
+                        multi_remote,
+                    )
+                    .map_err(|err| {
+                        format!(
+                            "Failed to parse raw cache for Remote {}: {err}",
+                            remote.name
                         )
-                        .map_err(|err| {
-                            format!(
-                                "Failed to parse raw cache for Remote {}: {err}",
-                                remote.name
-                            )
-                        })?
-                    }
-                };
-                snapshots.push(snapshot);
-            }
-            build_config(snapshots, profile.hook.as_deref()).map_err(
+                    })?
+                }
+            };
+            snapshots.push(snapshot);
+        }
+        build_config(&template, snapshots, profile.hook.as_deref()).map_err(
                 |error| {
                     log::error!(
                         "Failed to generate Profile runtime configuration: profile_id={} remotes={} error={error}",
@@ -332,10 +327,6 @@ pub async fn update_profile_runtime(
                     error
                 },
             )
-        }
-        crate::state::ProfileKind::File => Err(String::from(
-            "Local File Profiles do not need to be downloaded or updated.",
-        )),
     };
 
     let mut guard = runtime.lock().await;
@@ -429,8 +420,7 @@ pub async fn due_profile_ids(runtime: SharedGuiRuntime) -> Vec<String> {
         .profiles
         .iter()
         .filter(|profile| {
-            matches!(profile.kind, crate::state::ProfileKind::Url)
-                && profile.next_update_at > 0
+            profile.next_update_at > 0
                 && profile.next_update_at <= now
                 && !guard.updating_profiles.contains(&profile.id)
         })
@@ -439,10 +429,6 @@ pub async fn due_profile_ids(runtime: SharedGuiRuntime) -> Vec<String> {
 }
 
 fn next_update_at(profile: &crate::state::ProfileItem, now: u64) -> u64 {
-    if !matches!(profile.kind, crate::state::ProfileKind::Url) {
-        return 0;
-    }
-
     if let Some(hours) = profile.update_interval_hours {
         return now.saturating_add(u64::from(hours).saturating_mul(60 * 60));
     }

@@ -5,7 +5,8 @@ use ts_rs::TS;
 
 use crate::app::update_profile_runtime;
 use crate::routes::RouteState;
-use crate::state::{ProfileHeader, ProfileItem, ProfileKind, ProfileRemote};
+use crate::state::{ProfileItem, ProfileRemote};
+use crate::state::{ProfileTemplate, current_timestamp, generate_profile_id};
 
 use super::ApiResponse;
 
@@ -21,7 +22,6 @@ pub struct ProfileListResponse {
 pub struct ProfileSummary {
     pub id: String,
     pub name: String,
-    pub kind: ProfileKind,
     pub updated_at: u64,
     pub last_attempt_at: u64,
     pub last_update_failed: bool,
@@ -32,7 +32,6 @@ impl From<&ProfileItem> for ProfileSummary {
         Self {
             id: profile.id.clone(),
             name: profile.name.clone(),
-            kind: profile.kind.clone(),
             updated_at: profile.updated_at,
             last_attempt_at: profile.last_attempt_at,
             last_update_failed: profile.last_update_error.is_some(),
@@ -43,11 +42,8 @@ impl From<&ProfileItem> for ProfileSummary {
 #[derive(Debug, Deserialize)]
 pub struct CreateProfileRequest {
     name: String,
-    source: String,
     #[serde(default)]
-    content: Option<String>,
-    #[serde(default)]
-    headers: Vec<ProfileHeader>,
+    template_id: String,
     #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -56,18 +52,13 @@ pub struct CreateProfileRequest {
     remotes: Vec<ProfileRemote>,
     #[serde(default)]
     hook: Option<String>,
-    #[serde(default)]
-    keep_subscription_groups_and_rules: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProfileRequest {
     name: String,
-    source: String,
     #[serde(default)]
-    content: Option<String>,
-    #[serde(default)]
-    headers: Vec<ProfileHeader>,
+    template_id: String,
     #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -76,8 +67,6 @@ pub struct UpdateProfileRequest {
     remotes: Vec<ProfileRemote>,
     #[serde(default)]
     hook: Option<String>,
-    #[serde(default)]
-    keep_subscription_groups_and_rules: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,6 +172,15 @@ pub async fn import_profile(
     State(ctx): State<RouteState>,
     Json(request): Json<ImportProfileRequest>,
 ) -> Json<ApiResponse<ProfileListResponse>> {
+    let content = match serde_json::from_str::<nsb_core::SingBoxConfig>(&request.content)
+        .map_err(|error| {
+            format!("Imported Template must be structurally valid sing-box JSON: {error}")
+        })
+        .and_then(|config| serde_json::to_string_pretty(&config).map_err(|error| error.to_string()))
+    {
+        Ok(content) => content,
+        Err(error) => return Json(ApiResponse::failure(error, None)),
+    };
     let mut guard = ctx.runtime.lock().await;
     let file_name = request.file_name.trim();
     let base_name = std::path::Path::new(file_name)
@@ -192,6 +190,13 @@ pub async fn import_profile(
         .filter(|name| !name.is_empty())
         .unwrap_or("Profile");
     let name = unique_profile_name(base_name, &guard.controller.state.gui_config.profiles);
+    let template = ProfileTemplate {
+        id: generate_profile_id(),
+        name: format!("{name} Template"),
+        content,
+        updated_at: current_timestamp(),
+        reference_count: 0,
+    };
     let should_select = guard
         .controller
         .state
@@ -199,18 +204,61 @@ pub async fn import_profile(
         .current_profile_id
         .is_none();
 
-    match guard
-        .create_profile(
-            name.clone(),
-            String::new(),
-            Some(request.content),
-            Vec::new(),
-            None,
-            None,
-        )
-        .await
-    {
+    match guard.create_profile(name.clone(), None, None).await {
         Ok(()) => {
+            let created_id = guard
+                .controller
+                .state
+                .gui_config
+                .profiles
+                .last()
+                .map(|profile| profile.id.clone());
+            if let Some(created_id) = created_id.as_deref() {
+                guard
+                    .controller
+                    .state
+                    .gui_config
+                    .templates
+                    .push(template.clone());
+                if let Some(profile) = guard
+                    .controller
+                    .state
+                    .gui_config
+                    .profiles
+                    .iter_mut()
+                    .find(|profile| profile.id == created_id)
+                {
+                    profile.template_id = template.id.clone();
+                }
+                match nsb_core::build_config(&template.content, Vec::new(), None) {
+                    Ok(runtime) => {
+                        if let Err(error) =
+                            guard.profile_host.save_runtime(created_id, &runtime).await
+                        {
+                            return Json(ApiResponse::failure(
+                                error,
+                                Some(profile_list_response(&guard)),
+                            ));
+                        }
+                    }
+                    Err(error) => {
+                        return Json(ApiResponse::failure(
+                            error,
+                            Some(profile_list_response(&guard)),
+                        ));
+                    }
+                }
+                if let Err(error) = guard
+                    .app_config_store
+                    .save(&guard.controller.state.gui_config)
+                    .await
+                {
+                    return Json(ApiResponse::failure(
+                        error,
+                        Some(profile_list_response(&guard)),
+                    ));
+                }
+            }
             if should_select {
                 let created_id = guard
                     .controller
@@ -246,14 +294,6 @@ pub async fn create_profile(
 ) -> Json<ApiResponse<ProfileListResponse>> {
     let remotes = request.remotes;
     let hook = request.hook;
-    let source = remotes
-        .first()
-        .map(|remote| remote.url.clone())
-        .unwrap_or(request.source);
-    let headers = remotes
-        .first()
-        .map(|remote| remote.headers.clone())
-        .unwrap_or(request.headers);
     let (created, should_select_after_download) = {
         let mut guard = ctx.runtime.lock().await;
         let had_current_profile = guard
@@ -265,9 +305,6 @@ pub async fn create_profile(
         let result = guard
             .create_profile(
                 request.name,
-                source,
-                request.content,
-                headers,
                 request.update_interval_hours,
                 request.update_cron,
             )
@@ -284,9 +321,9 @@ pub async fn create_profile(
                     if let Err(err) = controller
                         .configure_profile_sources(
                             &created.id,
+                            request.template_id,
                             remotes,
                             hook,
-                            request.keep_subscription_groups_and_rules,
                             app_config_store,
                         )
                         .await
@@ -316,35 +353,25 @@ pub async fn create_profile(
     };
 
     let mut message = String::from("Profile added.");
-    if matches!(created.kind, ProfileKind::File) && should_select_after_download {
-        let mut guard = ctx.runtime.lock().await;
-        if let Err(err) = guard.activate_profile(created.id.clone()).await {
-            return Json(ApiResponse::failure(
-                err,
-                Some(profile_list_response(&guard)),
-            ));
-        }
-    } else if matches!(created.kind, ProfileKind::Url) {
-        if should_select_after_download {
-            match update_profile_runtime(ctx.runtime.clone(), created.id.clone(), false).await {
-                Ok(()) => {
-                    let mut guard = ctx.runtime.lock().await;
-                    if let Err(err) = guard.activate_profile(created.id.clone()).await {
-                        return Json(ApiResponse::failure(
-                            err,
-                            Some(profile_list_response(&guard)),
-                        ));
-                    }
+    if should_select_after_download {
+        match update_profile_runtime(ctx.runtime.clone(), created.id.clone(), false).await {
+            Ok(()) => {
+                let mut guard = ctx.runtime.lock().await;
+                if let Err(err) = guard.activate_profile(created.id.clone()).await {
+                    return Json(ApiResponse::failure(
+                        err,
+                        Some(profile_list_response(&guard)),
+                    ));
                 }
-                Err(err) => message = format!("Profile added, but initial download failed: {err}"),
             }
-        } else {
-            let runtime = ctx.runtime.clone();
-            let profile_id = created.id.clone();
-            tokio::spawn(async move {
-                let _ = update_profile_runtime(runtime, profile_id, false).await;
-            });
+            Err(err) => message = format!("Profile added, but initial download failed: {err}"),
         }
+    } else {
+        let runtime = ctx.runtime.clone();
+        let profile_id = created.id.clone();
+        tokio::spawn(async move {
+            let _ = update_profile_runtime(runtime, profile_id, false).await;
+        });
     }
 
     let guard = ctx.runtime.lock().await;
@@ -361,22 +388,11 @@ pub async fn update_profile(
 ) -> Json<ApiResponse<ProfileListResponse>> {
     let remotes = request.remotes;
     let hook = request.hook;
-    let source = remotes
-        .first()
-        .map(|remote| remote.url.clone())
-        .unwrap_or(request.source);
-    let headers = remotes
-        .first()
-        .map(|remote| remote.headers.clone())
-        .unwrap_or(request.headers);
     let mut guard = ctx.runtime.lock().await;
     match guard
         .update_profile(
             id.clone(),
             request.name,
-            source,
-            request.content,
-            headers,
             request.update_interval_hours,
             request.update_cron,
         )
@@ -391,9 +407,9 @@ pub async fn update_profile(
             if let Err(err) = controller
                 .configure_profile_sources(
                     &id,
+                    request.template_id,
                     remotes,
                     hook,
-                    request.keep_subscription_groups_and_rules,
                     app_config_store,
                 )
                 .await
@@ -518,20 +534,16 @@ mod tests {
         let profile = ProfileItem {
             id: String::from("profile-1"),
             name: String::from("Private subscription"),
-            kind: ProfileKind::Url,
-            url: String::from("https://example.test/subscribe?token=secret"),
+            template_id: String::new(),
             updated_at: 10,
-            headers: vec![ProfileHeader {
-                key: String::from("Authorization"),
-                value: String::from("Bearer secret"),
-            }],
             remotes: vec![ProfileRemote {
                 name: String::from("Remote"),
                 url: String::from("https://example.test/remote?token=secret"),
                 headers: Vec::new(),
+                format: crate::state::ProfileRemoteFormat::Clash,
+                keep: crate::state::ProfileRemoteKeepFields::default(),
             }],
             hook: Some(String::from("secret hook")),
-            keep_subscription_groups_and_rules: true,
             update_interval_hours: Some(24),
             update_cron: None,
             next_update_at: 20,

@@ -2,6 +2,7 @@ pub mod kernel;
 pub mod profiles;
 pub mod score;
 pub mod settings;
+pub mod templates;
 
 use axum::Json;
 use serde::Serialize;

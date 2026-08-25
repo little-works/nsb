@@ -3,7 +3,8 @@ pub mod subscription;
 
 pub use entity::*;
 pub use subscription::{
-    RemoteSnapshot, RemoteSource, build_config, parse_remote, run_finalize_hook,
+    RemoteFormat, RemoteKeepFields, RemoteSnapshot, RemoteSource, build_config, default_template,
+    parse_remote, run_finalize_hook,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

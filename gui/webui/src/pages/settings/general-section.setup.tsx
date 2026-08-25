@@ -8,19 +8,14 @@ import { HelpOutlineOutlined, TuneOutlined } from '@vicons/material';
 import { useI18n } from 'vue-i18n';
 
 export interface GeneralSectionProps {
-  mixedPort: string;
   appPort: string;
-  allowLan: boolean;
   autoLaunchEnabled: boolean;
   autoLaunchLoading: boolean;
   systemProxyEnabled: boolean;
   loading: boolean;
   saving: boolean;
-  onMixedPortChange?: (value: string) => void;
-  onMixedPortBlur?: () => void | Promise<void>;
   onAppPortChange?: (value: string) => void;
   onAppPortBlur?: () => void | Promise<void>;
-  onAllowLanChange?: (value: boolean) => void | Promise<void>;
   onAutoLaunchEnabledChange?: (value: boolean) => void | Promise<void>;
   onSystemProxyEnabledChange?: (value: boolean) => void | Promise<void>;
 }
@@ -51,17 +46,9 @@ export default __render<GeneralSectionProps>(() => {
   const disabled = props.loading || props.saving;
   const settings = [
     {
-      key: 'allow-lan',
-      title: t('settings.allowLan'),
-      desc: t('settings.allowLanDesc'),
-      checked: props.allowLan,
-      onChange: props.onAllowLanChange,
-      disabled,
-    },
-    {
       key: 'system-proxy',
       title: t('settings.systemProxy'),
-      desc: t('settings.systemProxyDesc', { port: props.mixedPort }),
+      desc: t('settings.systemProxyDesc'),
       checked: props.systemProxyEnabled,
       onChange: props.onSystemProxyEnabledChange,
       disabled,
@@ -155,33 +142,6 @@ export default __render<GeneralSectionProps>(() => {
               }
               onBlur={() => {
                 void props.onAppPortBlur?.();
-              }}
-            />
-          </label>
-        </div>
-        <div class="border-b border-outline-variant/50 p-4">
-          <label class="flex items-center gap-4">
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-medium leading-5 text-on-surface">
-                {t('settings.mixedPort')}
-              </p>
-              <p class="text-sm leading-5 text-on-surface-variant">
-                {t('settings.mixedPortDesc')}
-              </p>
-            </div>
-            <input
-              class="h-9 w-20 shrink-0 rounded border border-outline-variant bg-surface px-3 text-sm text-on-surface outline-none transition-all focus:border-primary"
-              disabled={disabled}
-              inputmode="numeric"
-              placeholder={t('settings.mixedPortPlaceholder')}
-              value={props.mixedPort}
-              onInput={(event) =>
-                props.onMixedPortChange?.(
-                  (event.target as HTMLInputElement).value,
-                )
-              }
-              onBlur={() => {
-                void props.onMixedPortBlur?.();
               }}
             />
           </label>

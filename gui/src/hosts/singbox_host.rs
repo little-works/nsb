@@ -12,9 +12,8 @@ use std::{
 use std::os::windows::process::CommandExt;
 
 use log::info;
-use nsb_core::{CacheFile, ClashApi, Experimental, Inbound, Log, SingBoxConfig, run_finalize_hook};
+use nsb_core::{SingBoxConfig, run_finalize_hook};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 use tokio::fs as tokio_fs;
 
 #[cfg(windows)]
@@ -396,9 +395,8 @@ impl SingBoxHost {
 
     async fn load_sing_box_config(&self, source: &str) -> Result<SingBoxConfig, String> {
         let body = self.read_config_source(source).await?;
-        let mut value = serde_json::from_str(&body)
+        let value = serde_json::from_str(&body)
             .map_err(|err| format!("Failed to parse sing-box configuration: {err}"))?;
-        apply_cache_file_defaults(&mut value);
 
         serde_json::from_value(value)
             .map_err(|err| format!("Failed to parse sing-box configuration: {err}"))
@@ -432,33 +430,20 @@ impl SingBoxHost {
         let controller_addr = format!("127.0.0.1:{controller_port}");
         let secret = generate_controller_secret(controller_port);
 
-        apply_mixed_inbound_defaults(&mut config, gui_config)?;
+        let _ = gui_config;
 
-        let mut log = config.log.take().unwrap_or(Log {
-            disabled: None,
-            level: None,
-            output: None,
-            timestamp: None,
-        });
-        log.timestamp = Some(true);
-        config.log = Some(log);
-
-        let mut experimental = config.experimental.take().unwrap_or(Experimental {
-            clash_api: None,
-            cache_file: Some(default_cache_file()),
-        });
-        let mut clash_api = experimental.clash_api.take().unwrap_or(ClashApi {
-            external_controller: None,
-            external_ui: None,
-            external_ui_download_url: None,
-            external_ui_download_detour: None,
-            secret: None,
-            default_mode: None,
-            access_control_allow_origin: None,
-            access_control_allow_private_network: None,
-        });
-        clash_api.external_controller = Some(controller_addr.clone());
-        clash_api.secret = Some(secret.clone());
+        let mut experimental = config.experimental.take().unwrap_or_default();
+        let mut clash_api = experimental.clash_api.take().unwrap_or_default();
+        if clash_api
+            .external_controller
+            .as_deref()
+            .is_none_or(str::is_empty)
+        {
+            clash_api.external_controller = Some(controller_addr.clone());
+        }
+        if clash_api.secret.as_deref().is_none_or(str::is_empty) {
+            clash_api.secret = Some(secret.clone());
+        }
         experimental.clash_api = Some(clash_api);
         config.experimental = Some(experimental);
 
@@ -583,101 +568,6 @@ impl SingBoxHost {
 fn terminate_child(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
-}
-
-fn default_cache_file() -> CacheFile {
-    CacheFile {
-        enabled: true,
-        path: Some(String::from("cache.db")),
-        cache_id: None,
-        store_fakeip: Some(true),
-        rdrc_timeout: Some(String::from("7d")),
-    }
-}
-
-fn apply_cache_file_defaults(config: &mut Value) {
-    let Some(config) = config.as_object_mut() else {
-        return;
-    };
-    let experimental = config
-        .entry(String::from("experimental"))
-        .or_insert_with(|| json!({}));
-    let Some(experimental) = experimental.as_object_mut() else {
-        return;
-    };
-
-    let Some(cache_file) = experimental.remove("cache_file") else {
-        experimental.insert(
-            String::from("cache_file"),
-            serde_json::to_value(default_cache_file())
-                .expect("cache file defaults are serializable"),
-        );
-        return;
-    };
-
-    let mut defaults =
-        serde_json::to_value(default_cache_file()).expect("cache file defaults are serializable");
-    deep_merge(&mut defaults, cache_file);
-    experimental.insert(String::from("cache_file"), defaults);
-}
-
-fn default_mixed_inbound(gui_config: &AppConfig) -> Inbound {
-    Inbound {
-        type_: String::from("mixed"),
-        tag: String::from("mixed-in"),
-        listen: if gui_config.allow_lan {
-            String::from("0.0.0.0")
-        } else {
-            String::from("127.0.0.1")
-        },
-        listen_port: usize::from(gui_config.mixed_port),
-        tcp_fast_open: Some(false),
-        tcp_multi_path: Some(false),
-        udp_fragment: Some(false),
-        domain_strategy: None,
-        users: None,
-        extra: Default::default(),
-    }
-}
-
-fn apply_mixed_inbound_defaults(
-    config: &mut SingBoxConfig,
-    gui_config: &AppConfig,
-) -> Result<(), String> {
-    let defaults = default_mixed_inbound(gui_config);
-    let Some(mixed_inbound) = config
-        .inbounds
-        .iter_mut()
-        .find(|inbound| inbound.type_ == "mixed")
-    else {
-        config.inbounds.push(defaults);
-        return Ok(());
-    };
-
-    let mut value = serde_json::to_value(&defaults)
-        .map_err(|err| format!("Failed to serialize default mixed inbound: {err}"))?;
-    let user_value = serde_json::to_value(&*mixed_inbound)
-        .map_err(|err| format!("Failed to serialize mixed inbound: {err}"))?;
-    deep_merge(&mut value, user_value);
-    *mixed_inbound = serde_json::from_value(value)
-        .map_err(|err| format!("Failed to merge mixed inbound: {err}"))?;
-
-    Ok(())
-}
-
-fn deep_merge(defaults: &mut Value, overrides: Value) {
-    match (defaults, overrides) {
-        (Value::Object(defaults), Value::Object(overrides)) => {
-            for (key, override_value) in overrides {
-                if let Some(default_value) = defaults.get_mut(&key) {
-                    deep_merge(default_value, override_value);
-                } else {
-                    defaults.insert(key, override_value);
-                }
-            }
-        }
-        (defaults, overrides) => *defaults = overrides,
-    }
 }
 
 fn launch_config_from_config(config: &SingBoxConfig) -> Result<LaunchConfig, String> {
@@ -1005,14 +895,9 @@ fn generate_controller_secret(port: u16) -> String {
 
 #[cfg(test)]
 mod tests {
-    use nsb_core::{ClashApi, Experimental, Inbound, SingBoxConfig};
-    use serde_json::json;
+    use nsb_core::{ClashApi, Experimental, SingBoxConfig};
 
-    use crate::config::AppConfig;
-
-    use super::{
-        apply_cache_file_defaults, apply_mixed_inbound_defaults, launch_config_from_config,
-    };
+    use super::launch_config_from_config;
 
     fn config_with_controller(controller: Option<&str>, secret: Option<&str>) -> SingBoxConfig {
         let mut config = SingBoxConfig::default();
@@ -1062,113 +947,5 @@ mod tests {
         let error = launch_config_from_config(&config).unwrap_err();
 
         assert!(error.contains("requires a non-empty experimental.clash_api.secret"));
-    }
-
-    #[test]
-    fn merges_cache_file_defaults_with_user_values() {
-        let mut value = json!({
-            "experimental": {
-                "cache_file": {
-                    "path": "profile-cache.db",
-                    "store_fakeip": false
-                }
-            }
-        });
-
-        apply_cache_file_defaults(&mut value);
-
-        assert_eq!(
-            value["experimental"]["cache_file"],
-            json!({
-                "enabled": true,
-                "path": "profile-cache.db",
-                "store_fakeip": false,
-                "rdrc_timeout": "7d"
-            })
-        );
-        assert!(serde_json::from_value::<SingBoxConfig>(value).is_ok());
-    }
-
-    #[test]
-    fn inserts_cache_file_defaults_when_user_configuration_omits_them() {
-        let mut value = json!({ "experimental": {} });
-
-        apply_cache_file_defaults(&mut value);
-
-        assert_eq!(
-            value["experimental"]["cache_file"],
-            json!({
-                "enabled": true,
-                "path": "cache.db",
-                "store_fakeip": true,
-                "rdrc_timeout": "7d"
-            })
-        );
-    }
-
-    #[test]
-    fn merges_only_mixed_inbound_and_preserves_other_inbounds() {
-        let direct = serde_json::from_value::<Inbound>(json!({
-            "type": "direct",
-            "tag": "direct-in",
-            "listen": "127.0.0.1",
-            "listen_port": 7891,
-            "sniff": { "enabled": true }
-        }))
-        .unwrap();
-        let mixed = serde_json::from_value::<Inbound>(json!({
-            "type": "mixed",
-            "tag": "profile-mixed",
-            "listen": "0.0.0.0",
-            "listen_port": 7892,
-            "tcp_fast_open": true,
-            "sniff": { "enabled": true }
-        }))
-        .unwrap();
-        let mut config = SingBoxConfig {
-            inbounds: vec![direct.clone(), mixed],
-            ..Default::default()
-        };
-
-        apply_mixed_inbound_defaults(&mut config, &AppConfig::default()).unwrap();
-
-        assert_eq!(config.inbounds[0].type_, "direct");
-        assert_eq!(config.inbounds[0].tag, "direct-in");
-        assert_eq!(config.inbounds[0].extra, direct.extra);
-        assert_eq!(config.inbounds[1].tag, "profile-mixed");
-        assert_eq!(config.inbounds[1].listen, "0.0.0.0");
-        assert_eq!(config.inbounds[1].listen_port, 7892);
-        assert_eq!(config.inbounds[1].tcp_fast_open, Some(true));
-        assert_eq!(config.inbounds[1].tcp_multi_path, Some(false));
-        assert_eq!(config.inbounds[1].udp_fragment, Some(false));
-        assert_eq!(
-            config.inbounds[1].extra["sniff"],
-            json!({ "enabled": true })
-        );
-    }
-
-    #[test]
-    fn appends_default_mixed_inbound_when_user_configuration_has_none() {
-        let direct = serde_json::from_value::<Inbound>(json!({
-            "type": "direct",
-            "tag": "direct-in",
-            "listen": "127.0.0.1",
-            "listen_port": 7891
-        }))
-        .unwrap();
-        let mut config = SingBoxConfig {
-            inbounds: vec![direct.clone()],
-            ..Default::default()
-        };
-
-        apply_mixed_inbound_defaults(&mut config, &AppConfig::default()).unwrap();
-
-        assert_eq!(config.inbounds.len(), 2);
-        assert_eq!(config.inbounds[0].tag, direct.tag);
-        assert_eq!(config.inbounds[1].type_, "mixed");
-        assert_eq!(config.inbounds[1].tag, "mixed-in");
-        assert_eq!(config.inbounds[1].tcp_fast_open, Some(false));
-        assert_eq!(config.inbounds[1].tcp_multi_path, Some(false));
-        assert_eq!(config.inbounds[1].udp_fragment, Some(false));
     }
 }

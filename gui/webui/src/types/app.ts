@@ -1,31 +1,25 @@
 import type { AppLanguage } from '@/rs-type/AppLanguage';
 
 export type RequestMethod =
-  | 'GET'
-  | 'POST'
-  | 'DELETE'
-  | 'PUT'
-  | 'HEAD'
-  | 'PATCH';
+  'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PATCH';
 export type RequestProxyMode =
-  | 'global'
-  | 'none'
-  | 'system'
-  | 'kernel'
-  | 'custom';
+  'global' | 'none' | 'system' | 'kernel' | 'custom';
 
 export type { AppConfig } from '@/rs-type/AppConfig';
 export type { AppLanguage } from '@/rs-type/AppLanguage';
 export type { ProfileItem } from '@/rs-type/ProfileItem';
 export type { ProfileHeader } from '@/rs-type/ProfileHeader';
 export type { ProfileRemote } from '@/rs-type/ProfileRemote';
-export type { ProfileKind } from '@/rs-type/ProfileKind';
+export type { ProfileRemoteFormat } from '@/rs-type/ProfileRemoteFormat';
+export type { ProfileRemoteKeepFields } from '@/rs-type/ProfileRemoteKeepFields';
+export type { ProfileTemplate } from '@/rs-type/ProfileTemplate';
 export type { ProfileListResponse } from '@/rs-type/ProfileListResponse';
 export type { ProfileSummary } from '@/rs-type/ProfileSummary';
 
 export const AppPageType = {
   Proxies: 'Proxies',
   Profiles: 'Profiles',
+  Templates: 'Templates',
   Logs: 'Logs',
   Connections: 'Connections',
   Settings: 'Settings',
@@ -48,9 +42,7 @@ export interface RuntimeStatus {
 }
 
 export interface RuntimeSettings {
-  mixed_port: number;
   app_port: number;
-  allow_lan: boolean;
   system_proxy_enabled: boolean;
   app_language: AppLanguage;
 }
@@ -62,27 +54,33 @@ export interface ApiResponse<T> {
 }
 
 export interface SaveProfilePayload {
-  id: string | null;
   name: string;
-  source: string;
-  content?: string | null;
-  headers: Array<{ key: string; value: string }>;
+  template_id: string;
   update_interval_hours: number | null;
   update_cron: string | null;
-  remotes?: Array<{
+  remotes: Array<{
     name: string;
     url: string;
     headers: Array<{ key: string; value: string }>;
+    format: 'clash' | 'singbox';
+    keep: {
+      nodes: boolean;
+      groups: boolean;
+      route_final: boolean;
+      route_rules: boolean;
+    };
   }>;
   hook?: string | null;
-  keep_subscription_groups_and_rules?: boolean;
 }
 
 export interface SaveSettingsPayload {
-  mixed_port: number;
   app_port: number;
-  allow_lan: boolean;
   system_proxy_enabled: boolean;
+}
+
+export interface SaveProfileTemplatePayload {
+  name: string;
+  content: string;
 }
 
 export interface AppSettings {

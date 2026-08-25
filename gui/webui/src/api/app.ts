@@ -7,7 +7,9 @@ import type {
   RuntimeStatus,
   RuntimeSettings,
   SaveProfilePayload,
+  SaveProfileTemplatePayload,
   SaveSettingsPayload,
+  ProfileTemplate,
 } from '@/types';
 
 const request = new Request();
@@ -62,6 +64,33 @@ export function importProfile(fileName: string, content: string) {
     file_name: fileName,
     content,
   });
+}
+
+export function listTemplates() {
+  return request.get<ProfileTemplate[]>('/api/templates');
+}
+
+export function getDefaultTemplate() {
+  return request.get<string>('/api/templates/default');
+}
+
+export function getTemplate(id: string) {
+  return request.get<ProfileTemplate>(`/api/templates/${id}`);
+}
+
+export function createTemplate(payload: SaveProfileTemplatePayload) {
+  return request.post<ProfileTemplate>('/api/templates', payload);
+}
+
+export function updateTemplate(
+  id: string,
+  payload: SaveProfileTemplatePayload,
+) {
+  return request.put<ProfileTemplate>(`/api/templates/${id}`, payload);
+}
+
+export function deleteTemplate(id: string) {
+  return request.delete<void>(`/api/templates/${id}`);
 }
 
 export function updateProfile(

@@ -18,7 +18,6 @@ export interface ProfilesTableProps {
   loading: boolean;
   onEdit: (item: ProfileSummary) => void;
   onDelete: (item: ProfileSummary) => void;
-  onEditNodes: (item: ProfileSummary) => void;
   onSetCurrent: (item: ProfileSummary) => void | Promise<void>;
   onRefresh: (item: ProfileSummary) => void | Promise<void>;
 }
@@ -125,20 +124,6 @@ export default __render<ProfilesTableProps>(() => {
                               class="px-2"
                               shape="rect"
                               size="xs"
-                              variant="ghost"
-                              onClick={() => {
-                                close();
-                                props.onEditNodes(item);
-                              }}
-                            >
-                              {t('profiles.editNodes')}
-                            </Button>
-                            <div class="my-1 h-px bg-outline-variant" />
-                            <Button
-                              block
-                              class="px-2"
-                              shape="rect"
-                              size="xs"
                               variant="danger-ghost"
                               onClick={() => {
                                 close();
@@ -153,12 +138,6 @@ export default __render<ProfilesTableProps>(() => {
                     />
                   </div>
                 </div>
-                <p
-                  class="mb-2 truncate rounded bg-surface-container-high px-2 py-1 font-mono text-xs text-outline"
-                  title={item.kind}
-                >
-                  {item.kind}
-                </p>
                 <div class="mt-auto flex items-center justify-between gap-3">
                   <div
                     class="flex min-w-0 items-center gap-1.5
