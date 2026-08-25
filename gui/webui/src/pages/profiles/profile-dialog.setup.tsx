@@ -1,5 +1,6 @@
 import { __render } from '@/shared/helpter';
 import { Button } from '@/components/button';
+import { Select } from '@/components/select';
 import { Icon } from '@/components/icon';
 import { Page, PageContent } from '@/components/page-content';
 import { CodeEditor } from '@/components/code-editor';
@@ -239,26 +240,22 @@ export default __render<ProfileDialogProps>(() => {
                   {t('profiles.dialog.createPresetTemplate')}
                 </Button>
               </div>
-              <select
-                class={[
-                  'h-9 w-full rounded border border-outline-variant',
-                  'bg-surface px-3',
-                  'text-sm text-on-surface outline-none focus:border-primary',
+              <Select
+                ariaLabel={t('profiles.dialog.template')}
+                block
+                modelValue={props.templateId}
+                options={[
+                  {
+                    value: '',
+                    label: t('profiles.dialog.selectTemplate'),
+                  },
+                  ...props.templates.map((template) => ({
+                    value: template.id,
+                    label: template.name,
+                  })),
                 ]}
-                value={props.templateId}
-                onChange={(event) =>
-                  props.onTemplateIdChange(
-                    (event.target as HTMLSelectElement).value,
-                  )
-                }
-              >
-                <option value="">{t('profiles.dialog.selectTemplate')}</option>
-                {props.templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
+                onUpdateModelValue={props.onTemplateIdChange}
+              />
             </div>
           </div>
         </section>
@@ -413,27 +410,26 @@ export default __render<ProfileDialogProps>(() => {
                       <span class="mb-1 block text-xs font-medium text-on-surface-variant">
                         {t('profiles.dialog.remoteFormat')}
                       </span>
-                      <select
-                        class={[
-                          'h-9 w-full rounded border border-outline-variant',
-                          'bg-surface px-3',
-                          'text-sm text-on-surface outline-none focus:border-primary',
+                      <Select
+                        ariaLabel={t('profiles.dialog.remoteFormat')}
+                        block
+                        modelValue={remote.format}
+                        options={[
+                          {
+                            value: 'clash',
+                            label: t('profiles.dialog.remoteFormatClash'),
+                          },
+                          {
+                            value: 'singbox',
+                            label: t('profiles.dialog.remoteFormatSingbox'),
+                          },
                         ]}
-                        value={remote.format}
-                        onChange={(event) =>
+                        onUpdateModelValue={(value) =>
                           updateRemote(index, {
-                            format: (event.target as HTMLSelectElement)
-                              .value as ProfileRemote['format'],
+                            format: value as ProfileRemote['format'],
                           })
                         }
-                      >
-                        <option value="clash">
-                          {t('profiles.dialog.remoteFormatClash')}
-                        </option>
-                        <option value="singbox">
-                          {t('profiles.dialog.remoteFormatSingbox')}
-                        </option>
-                      </select>
+                      />
                     </label>
                     <div class="rounded border border-outline-variant/50 bg-surface p-3">
                       <p class="mb-2 text-xs font-medium text-on-surface-variant">
