@@ -119,6 +119,8 @@ pub struct ProfileItem {
     pub name: String,
     #[serde(default)]
     pub template_id: String,
+    #[serde(default)]
+    pub inline_template: Option<String>,
     #[serde(default, deserialize_with = "deserialize_timestamp")]
     pub updated_at: u64,
     #[serde(default)]

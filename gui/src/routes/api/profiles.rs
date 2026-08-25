@@ -6,7 +6,6 @@ use ts_rs::TS;
 use crate::app::update_profile_runtime;
 use crate::routes::RouteState;
 use crate::state::{ProfileItem, ProfileRemote};
-use crate::state::{ProfileTemplate, current_timestamp, generate_profile_id};
 
 use super::ApiResponse;
 
@@ -45,6 +44,8 @@ pub struct CreateProfileRequest {
     #[serde(default)]
     template_id: String,
     #[serde(default)]
+    inline_template: Option<String>,
+    #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
     update_cron: Option<String>,
@@ -59,6 +60,8 @@ pub struct UpdateProfileRequest {
     name: String,
     #[serde(default)]
     template_id: String,
+    #[serde(default)]
+    inline_template: Option<String>,
     #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -190,13 +193,6 @@ pub async fn import_profile(
         .filter(|name| !name.is_empty())
         .unwrap_or("Profile");
     let name = unique_profile_name(base_name, &guard.controller.state.gui_config.profiles);
-    let template = ProfileTemplate {
-        id: generate_profile_id(),
-        name: format!("{name} Template"),
-        content,
-        updated_at: current_timestamp(),
-        reference_count: 0,
-    };
     let should_select = guard
         .controller
         .state
@@ -214,12 +210,6 @@ pub async fn import_profile(
                 .last()
                 .map(|profile| profile.id.clone());
             if let Some(created_id) = created_id.as_deref() {
-                guard
-                    .controller
-                    .state
-                    .gui_config
-                    .templates
-                    .push(template.clone());
                 if let Some(profile) = guard
                     .controller
                     .state
@@ -228,9 +218,10 @@ pub async fn import_profile(
                     .iter_mut()
                     .find(|profile| profile.id == created_id)
                 {
-                    profile.template_id = template.id.clone();
+                    profile.template_id = String::new();
+                    profile.inline_template = Some(content.clone());
                 }
-                match nsb_core::build_config(&template.content, Vec::new(), None) {
+                match nsb_core::build_config(&content, Vec::new(), None) {
                     Ok(runtime) => {
                         if let Err(error) =
                             guard.profile_host.save_runtime(created_id, &runtime).await
@@ -322,6 +313,7 @@ pub async fn create_profile(
                         .configure_profile_sources(
                             &created.id,
                             request.template_id,
+                            request.inline_template,
                             remotes,
                             hook,
                             app_config_store,
@@ -408,6 +400,7 @@ pub async fn update_profile(
                 .configure_profile_sources(
                     &id,
                     request.template_id,
+                    request.inline_template,
                     remotes,
                     hook,
                     app_config_store,
@@ -535,6 +528,7 @@ mod tests {
             id: String::from("profile-1"),
             name: String::from("Private subscription"),
             template_id: String::new(),
+            inline_template: None,
             updated_at: 10,
             remotes: vec![ProfileRemote {
                 name: String::from("Remote"),

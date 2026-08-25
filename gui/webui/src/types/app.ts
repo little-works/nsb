@@ -56,6 +56,7 @@ export interface ApiResponse<T> {
 export interface SaveProfilePayload {
   name: string;
   template_id: string;
+  inline_template?: string | null;
   update_interval_hours: number | null;
   update_cron: string | null;
   remotes: Array<{

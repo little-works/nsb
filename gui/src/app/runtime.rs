@@ -222,7 +222,9 @@ pub async fn update_profile_runtime(
         guard.profile_host.clone()
     };
     let result = {
-        let template = {
+        let template = if let Some(content) = profile.inline_template.clone() {
+            content
+        } else {
             let guard = runtime.lock().await;
             guard
                 .controller
@@ -232,8 +234,8 @@ pub async fn update_profile_runtime(
                 .iter()
                 .find(|item| item.id == profile.template_id)
                 .map(|item| item.content.clone())
-        }
-        .ok_or_else(|| String::from("Profile references a missing Template."))?;
+                .ok_or_else(|| String::from("Profile references a missing Template."))?
+        };
         let remotes = profile.remotes.clone();
         let multi_remote = remotes.len() > 1;
         let mut snapshots = Vec::new();

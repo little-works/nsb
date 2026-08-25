@@ -1,5 +1,6 @@
 import { __render } from '@/shared/helpter';
 import { Button } from '@/components/button';
+import { Input } from '@/components/input';
 import { Checkbox } from '@/components/checkbox';
 import { Icon } from '@/components/icon';
 import { Popover } from '@/components/popover';
@@ -129,8 +130,9 @@ export default __render<GeneralSectionProps>(() => {
                 {t('settings.appPortDesc')}
               </p>
             </div>
-            <input
-              class="h-9 w-20 shrink-0 rounded border border-outline-variant bg-surface px-3 text-sm text-on-surface outline-none transition-all focus:border-primary"
+            <Input
+              block={false}
+              class="w-20 shrink-0"
               disabled={disabled}
               inputmode="numeric"
               placeholder={t('settings.appPortPlaceholder')}

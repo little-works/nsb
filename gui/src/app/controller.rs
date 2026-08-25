@@ -146,6 +146,10 @@ impl AppController {
             id: id.clone(),
             name,
             template_id: String::new(),
+            inline_template: Some(
+                serde_json::to_string_pretty(&nsb_core::default_template())
+                    .map_err(|error| format!("Failed to serialize default Template: {error}"))?,
+            ),
             updated_at: current_timestamp(),
             remotes: Vec::new(),
             hook: None,
@@ -241,6 +245,7 @@ impl AppController {
         &mut self,
         id: &str,
         template_id: String,
+        inline_template: Option<String>,
         remotes: Vec<ProfileRemote>,
         hook: Option<String>,
         app_config_store: &AppConfigStore,
@@ -270,17 +275,37 @@ impl AppController {
             .iter()
             .position(|item| item.id == profile.id)
             .expect("profile exists");
-        if !self
-            .state
-            .gui_config
-            .templates
-            .iter()
-            .any(|template| template.id == template_id)
-        {
-            return Err(String::from("Selected Template was not found."));
+        let template_id = template_id.trim().to_string();
+        let inline_template = inline_template
+            .map(|content| content.trim().to_string())
+            .filter(|content| !content.is_empty());
+        match (&template_id[..], &inline_template) {
+            ("", Some(content)) => {
+                serde_json::from_str::<nsb_core::SingBoxConfig>(content).map_err(|error| {
+                    format!("Inline Template must be valid sing-box JSON: {error}")
+                })?;
+            }
+            (template_id, None) if !template_id.is_empty() => {
+                if !self
+                    .state
+                    .gui_config
+                    .templates
+                    .iter()
+                    .any(|template| template.id == template_id)
+                {
+                    return Err(String::from("Selected Template was not found."));
+                }
+            }
+            ("", None) => return Err(String::from("A Template is required.")),
+            _ => {
+                return Err(String::from(
+                    "Choose either an inline Template or a shared Template.",
+                ));
+            }
         }
         let target = &mut self.state.gui_config.profiles[index];
         target.template_id = template_id;
+        target.inline_template = inline_template;
         target.remotes = remotes;
         target.hook = hook
             .map(|value| value.trim().to_string())

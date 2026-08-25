@@ -14,14 +14,9 @@ import {
 defineOptions({ name: 'Button', inheritAttrs: false });
 
 export type ButtonVariant =
-  | 'solid'
-  | 'outline'
-  | 'subtle'
-  | 'ghost'
-  | 'primary-ghost'
-  | 'danger-ghost';
+  'solid' | 'outline' | 'subtle' | 'ghost' | 'primary-ghost' | 'danger-ghost';
 export type ButtonShape = 'pill' | 'rect' | 'square';
-export type ButtonSize = 'xs' | 'sm' | 'md';
+export type ButtonSize = 'xs' | 'sm' | 'field' | 'md';
 
 export interface ButtonProps {
   variant?: ButtonVariant;
@@ -61,16 +56,19 @@ const sizeClassMap: Record<ButtonShape, Record<ButtonSize, string>> = {
   pill: {
     xs: 'h-7 rounded-full px-2.5 text-xs',
     sm: 'h-8 rounded-full px-3 text-xs',
+    field: 'h-9 rounded-full px-3 text-sm',
     md: 'h-10 rounded-full px-4 text-sm',
   },
   rect: {
     xs: 'h-7 rounded px-2.5 text-xs',
     sm: 'h-8 rounded px-3 text-xs',
+    field: 'h-9 rounded px-3 text-sm',
     md: 'h-10 rounded px-4 text-sm',
   },
   square: {
     xs: 'h-7 w-7 rounded text-xs',
     sm: 'h-8 w-8 rounded text-xs',
+    field: 'h-9 w-9 rounded text-sm',
     md: 'h-10 w-10 rounded text-sm',
   },
 };

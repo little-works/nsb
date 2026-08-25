@@ -5,6 +5,7 @@ import {
   updateTemplate,
 } from '@/api/client';
 import { IconButton } from '@/components/button';
+import { Input } from '@/components/input';
 import { Page, PageContent } from '@/components/page-content';
 import { toast } from '@/components/toast';
 import TemplateJsonEditor from '@/pages/profiles/profile-node-editor.setup';
@@ -234,12 +235,7 @@ export default __render(() => (
                 <span class="mb-1 block text-sm font-medium text-on-surface">
                   {t('templates.name')}
                 </span>
-                <input
-                  class={[
-                    'h-9 w-full rounded border border-outline-variant px-3',
-                    'bg-surface text-sm text-on-surface outline-none',
-                    'focus:border-primary',
-                  ]}
+                <Input
                   value={name.value}
                   placeholder={t('templates.namePlaceholder')}
                   onInput={(event) => {

@@ -1,7 +1,6 @@
 import { __render } from '@/shared/helpter';
 import {
   createProfile,
-  createTemplate,
   getDefaultTemplate,
   getProfile,
   updateProfile,
@@ -68,10 +67,11 @@ const pageContext = usePageContext();
 const profileId = computed(() =>
   new URL(pageContext.urlOriginal, 'http://localhost').searchParams.get('id'),
 );
-const initialized = ref(false);
+const formDirty = ref(false);
 const saving = ref(false);
 const name = ref('');
 const templateId = ref('');
+const inlineTemplate = ref('');
 const remotes = ref<ProfileRemote[]>([createEmptyRemote()]);
 const hook = ref(EMPTY_PROFILE_HOOK_TEMPLATE);
 const interval = ref('');
@@ -98,6 +98,7 @@ const profile = computed(() => {
 function resetForm() {
   name.value = '';
   templateId.value = '';
+  inlineTemplate.value = '';
   remotes.value = [createEmptyRemote()];
   hook.value = EMPTY_PROFILE_HOOK_TEMPLATE;
   interval.value = '';
@@ -107,16 +108,18 @@ function resetForm() {
 watch(
   profileId,
   () => {
-    initialized.value = false;
+    formDirty.value = false;
     resetForm();
+    if (!profileId.value) void initializeInlineTemplate();
   },
   { immediate: true },
 );
 
 watch(profile, (value) => {
-  if (!value || initialized.value) return;
+  if (!value || formDirty.value) return;
   name.value = value.name;
   templateId.value = value.template_id;
+  inlineTemplate.value = value.inline_template ?? '';
   remotes.value = value.remotes.map((remote) => ({
     ...remote,
     headers: [...remote.headers],
@@ -125,7 +128,6 @@ watch(profile, (value) => {
   hook.value = value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
   interval.value = value.update_interval_hours?.toString() ?? '';
   cron.value = value.update_cron ?? '';
-  initialized.value = true;
 });
 
 function close() {
@@ -216,7 +218,7 @@ onDeactivated(deactivateProfileEditDock);
 onBeforeUnmount(deactivateProfileEditDock);
 
 async function submit() {
-  if (!templateId.value) {
+  if (!templateId.value && !inlineTemplate.value.trim()) {
     toast.error({ title: i18n.global.t('profiles.dialog.templateRequired') });
     return;
   }
@@ -227,6 +229,7 @@ async function submit() {
     const payload = {
       name: name.value,
       template_id: templateId.value,
+      inline_template: inlineTemplate.value.trim() || null,
       remotes: remotes.value
         .filter((remote) => remote.url.trim())
         .map((remote) => ({
@@ -261,21 +264,19 @@ async function submit() {
   }
 }
 
-async function createPresetTemplate() {
+async function initializeInlineTemplate() {
+  if (inlineTemplate.value.trim()) return;
   try {
     const content = await getDefaultTemplate();
-    const template = await createTemplate({
-      name: i18n.global.t('templates.defaultName'),
-      content,
-    });
-    await templatesQuery.refetch();
-    templateId.value = template.id;
+    if (!templateId.value && !inlineTemplate.value.trim()) {
+      inlineTemplate.value = content;
+    }
   } catch (error) {
     toast.error({
       title:
         error instanceof Error
           ? error.message
-          : i18n.global.t('templates.createFailed'),
+          : i18n.global.t('profiles.dialog.templateLoadFailed'),
     });
   }
 }
@@ -287,6 +288,7 @@ export default __render(() => (
     formName={name.value}
     remotes={remotes.value}
     templateId={templateId.value}
+    inlineTemplate={inlineTemplate.value}
     templates={templatesQuery.data.value ?? []}
     hook={hook.value}
     updateIntervalHours={interval.value}
@@ -297,23 +299,34 @@ export default __render(() => (
     saving={saving.value}
     onClose={close}
     onNameInput={(value) => {
+      formDirty.value = true;
       name.value = value;
     }}
     onRemotesChange={(value) => {
+      formDirty.value = true;
       remotes.value = value;
     }}
     onTemplateIdChange={(value) => {
+      formDirty.value = true;
       templateId.value = value;
+      if (value) inlineTemplate.value = '';
+      else void initializeInlineTemplate();
     }}
-    onCreatePresetTemplate={createPresetTemplate}
+    onInlineTemplateChange={(value) => {
+      formDirty.value = true;
+      inlineTemplate.value = value;
+    }}
     onHookInput={(value) => {
+      formDirty.value = true;
       hook.value = value;
     }}
     onUpdateCronInput={(value) => {
+      formDirty.value = true;
       cron.value = value;
       if (value.trim()) interval.value = '';
     }}
     onUpdateIntervalInput={(value) => {
+      formDirty.value = true;
       interval.value = value;
       if (value) cron.value = '';
     }}

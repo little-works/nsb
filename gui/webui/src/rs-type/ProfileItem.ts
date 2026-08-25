@@ -5,6 +5,7 @@ export type ProfileItem = {
   id: string;
   name: string;
   template_id: string;
+  inline_template: string | null;
   updated_at: number;
   remotes: Array<ProfileRemote>;
   hook: string | null;
