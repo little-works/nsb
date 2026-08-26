@@ -26,6 +26,63 @@ pub struct ProfileSummary {
     pub last_update_failed: bool,
 }
 
+/// The editable Profile representation exposed by the HTTP API.
+///
+/// `ProfileItem` keeps inline templates as formatted JSON text in the app
+/// configuration so runtime generation can consume it directly. The API must
+/// not expose that text as a JSON string, otherwise the editor receives a
+/// quoted JSON literal instead of the template object.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct ProfileDetailResponse {
+    pub id: String,
+    pub name: String,
+    pub template_id: String,
+    #[ts(type = "Record<string, unknown>")]
+    pub inline_template: Option<serde_json::Value>,
+    pub updated_at: u64,
+    pub remotes: Vec<ProfileRemote>,
+    pub hook: Option<String>,
+    pub update_interval_hours: Option<u32>,
+    pub update_cron: Option<String>,
+    pub next_update_at: u64,
+    pub last_attempt_at: u64,
+    pub last_update_error: Option<String>,
+    pub revision: u64,
+}
+
+impl TryFrom<&ProfileItem> for ProfileDetailResponse {
+    type Error = String;
+
+    fn try_from(profile: &ProfileItem) -> Result<Self, Self::Error> {
+        let inline_template = profile
+            .inline_template
+            .as_deref()
+            .map(|content| {
+                serde_json::from_str::<serde_json::Value>(content).map_err(|error| {
+                    format!("Profile inline template is not valid JSON: {error}")
+                })
+            })
+            .transpose()?;
+
+        Ok(Self {
+            id: profile.id.clone(),
+            name: profile.name.clone(),
+            template_id: profile.template_id.clone(),
+            inline_template,
+            updated_at: profile.updated_at,
+            remotes: profile.remotes.clone(),
+            hook: profile.hook.clone(),
+            update_interval_hours: profile.update_interval_hours,
+            update_cron: profile.update_cron.clone(),
+            next_update_at: profile.next_update_at,
+            last_attempt_at: profile.last_attempt_at,
+            last_update_error: profile.last_update_error.clone(),
+            revision: profile.revision,
+        })
+    }
+}
+
 impl From<&ProfileItem> for ProfileSummary {
     fn from(profile: &ProfileItem) -> Self {
         Self {
@@ -44,7 +101,7 @@ pub struct CreateProfileRequest {
     #[serde(default)]
     template_id: String,
     #[serde(default)]
-    inline_template: Option<String>,
+    inline_template: Option<serde_json::Value>,
     #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -61,7 +118,7 @@ pub struct UpdateProfileRequest {
     #[serde(default)]
     template_id: String,
     #[serde(default)]
-    inline_template: Option<String>,
+    inline_template: Option<serde_json::Value>,
     #[serde(default)]
     update_interval_hours: Option<u32>,
     #[serde(default)]
@@ -96,7 +153,7 @@ pub async fn list_profiles(
 pub async fn get_profile(
     Path(id): Path<String>,
     State(ctx): State<RouteState>,
-) -> Json<ApiResponse<ProfileItem>> {
+) -> Json<ApiResponse<ProfileDetailResponse>> {
     let guard = ctx.runtime.lock().await;
     match guard
         .controller
@@ -106,7 +163,10 @@ pub async fn get_profile(
         .iter()
         .find(|profile| profile.id == id)
     {
-        Some(profile) => Json(ApiResponse::success(String::new(), Some(profile.clone()))),
+        Some(profile) => match ProfileDetailResponse::try_from(profile) {
+            Ok(response) => Json(ApiResponse::success(String::new(), Some(response))),
+            Err(error) => Json(ApiResponse::failure(error, None)),
+        },
         None => Json(ApiResponse::failure(
             String::from("Specified Profile was not found."),
             None,
@@ -283,6 +343,10 @@ pub async fn create_profile(
     State(ctx): State<RouteState>,
     Json(request): Json<CreateProfileRequest>,
 ) -> Json<ApiResponse<ProfileListResponse>> {
+    let inline_template = match serialize_inline_template(request.inline_template) {
+        Ok(content) => content,
+        Err(error) => return Json(ApiResponse::failure(error, None)),
+    };
     let remotes = request.remotes;
     let hook = request.hook;
     let (created, should_select_after_download) = {
@@ -313,7 +377,7 @@ pub async fn create_profile(
                         .configure_profile_sources(
                             &created.id,
                             request.template_id,
-                            request.inline_template,
+                            inline_template,
                             remotes,
                             hook,
                             app_config_store,
@@ -378,6 +442,10 @@ pub async fn update_profile(
     State(ctx): State<RouteState>,
     Json(request): Json<UpdateProfileRequest>,
 ) -> Json<ApiResponse<ProfileListResponse>> {
+    let inline_template = match serialize_inline_template(request.inline_template) {
+        Ok(content) => content,
+        Err(error) => return Json(ApiResponse::failure(error, None)),
+    };
     let remotes = request.remotes;
     let hook = request.hook;
     let mut guard = ctx.runtime.lock().await;
@@ -400,7 +468,7 @@ pub async fn update_profile(
                 .configure_profile_sources(
                     &id,
                     request.template_id,
-                    request.inline_template,
+                    inline_template,
                     remotes,
                     hook,
                     app_config_store,
@@ -501,6 +569,20 @@ fn profile_list_response(runtime: &crate::app::GuiRuntime) -> ProfileListRespons
             .current_profile_id
             .clone(),
     }
+}
+
+fn serialize_inline_template(
+    inline_template: Option<serde_json::Value>,
+) -> Result<Option<String>, String> {
+    inline_template
+        .map(|value| {
+            if !value.is_object() {
+                return Err(String::from("Inline Template must be a JSON object."));
+            }
+            serde_json::to_string_pretty(&value)
+                .map_err(|error| format!("Failed to serialize Inline Template: {error}"))
+        })
+        .transpose()
 }
 
 fn unique_profile_name(base_name: &str, profiles: &[ProfileItem]) -> String {

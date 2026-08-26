@@ -8,6 +8,7 @@ import { CodeEditor } from '@/components/code-editor';
 import { Dialog } from '@/components/dialog';
 import { Popover } from '@/components/popover';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
+import TemplateJsonEditor from '@/pages/profiles/profile-node-editor.setup';
 import type { ProfileRemote, ProfileTemplate } from '@/types';
 import { useMounted } from '@vueuse/core';
 import {
@@ -29,13 +30,26 @@ import { useI18n } from 'vue-i18n';
 const HOOK_EXAMPLE_CODE =
   "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';";
 
+type JsonObject = Record<string, unknown>;
+
+function serializeInlineTemplate(template: JsonObject | null) {
+  return template ? JSON.stringify(template, null, 2) : '';
+}
+
+function parseInlineTemplate(content: string): JsonObject | null {
+  const value: unknown = JSON.parse(content);
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonObject)
+    : null;
+}
+
 export interface ProfileDialogProps {
   open: boolean;
   editing: boolean;
   formName: string;
   remotes: ProfileRemote[];
   templateId: string;
-  inlineTemplate: string;
+  inlineTemplate: JsonObject | null;
   templates: ProfileTemplate[];
   hook: string;
   updateIntervalHours: string;
@@ -46,7 +60,7 @@ export interface ProfileDialogProps {
   onNameInput: (value: string) => void;
   onRemotesChange: (value: ProfileRemote[]) => void;
   onTemplateIdChange: (value: string) => void;
-  onInlineTemplateChange: (value: string) => void;
+  onInlineTemplateChange: (value: JsonObject | null) => void;
   onHookInput: (value: string) => void;
   onUpdateCronInput: (value: string) => void;
   onUpdateIntervalInput: (value: string) => void;
@@ -59,6 +73,7 @@ defineOptions({ name: 'ProfileDialog' });
 
 const expandedHeaderIndexes = ref(new Set<number>());
 const templateEditorOpen = ref(false);
+const inlineTemplateDraft = ref<JsonObject | null>(null);
 const templateViewerOpen = ref(false);
 const keepFieldsRemoteIndex = ref<number | null>(null);
 const mounted = useMounted();
@@ -160,6 +175,16 @@ function toggleHeaders(index: number) {
   expandedHeaderIndexes.value = next;
 }
 
+function openInlineTemplateEditor() {
+  inlineTemplateDraft.value = props.inlineTemplate;
+  templateEditorOpen.value = true;
+}
+
+function saveInlineTemplate() {
+  props.onInlineTemplateChange(inlineTemplateDraft.value);
+  templateEditorOpen.value = false;
+}
+
 const { t } = useI18n();
 
 export default __render<ProfileDialogProps>(() => {
@@ -216,6 +241,7 @@ export default __render<ProfileDialogProps>(() => {
                   {t('profiles.dialog.nameDesc')}
                 </span>
                 <Input
+                  size="sm"
                   value={props.formName}
                   onInput={(event) => {
                     props.onNameInput((event.target as HTMLInputElement).value);
@@ -239,6 +265,7 @@ export default __render<ProfileDialogProps>(() => {
                     <Select
                       ariaLabel={t('profiles.dialog.template')}
                       block
+                      size="sm"
                       modelValue={props.templateId}
                       options={[
                         {
@@ -256,7 +283,7 @@ export default __render<ProfileDialogProps>(() => {
                   {props.templateId ? (
                     <Button
                       shape="rect"
-                      size="field"
+                      size="sm"
                       variant="outline"
                       onClick={() => {
                         templateViewerOpen.value = true;
@@ -267,11 +294,9 @@ export default __render<ProfileDialogProps>(() => {
                   ) : (
                     <Button
                       shape="rect"
-                      size="field"
+                      size="sm"
                       variant="outline"
-                      onClick={() => {
-                        templateEditorOpen.value = true;
-                      }}
+                      onClick={openInlineTemplateEditor}
                     >
                       {t('common.edit')}
                     </Button>
@@ -398,6 +423,7 @@ export default __render<ProfileDialogProps>(() => {
                             {t('profiles.dialog.remoteName')}
                           </span>
                           <Input
+                            size="sm"
                             placeholder={t(
                               'profiles.dialog.remotePlaceholder',
                               {
@@ -419,6 +445,7 @@ export default __render<ProfileDialogProps>(() => {
                           <Select
                             ariaLabel={t('profiles.dialog.remoteFormat')}
                             block
+                            size="sm"
                             modelValue={remote.format}
                             options={[
                               {
@@ -443,7 +470,7 @@ export default __render<ProfileDialogProps>(() => {
                           </span>
                           <Button
                             shape="rect"
-                            size="field"
+                            size="sm"
                             variant="outline"
                             onClick={() => {
                               keepFieldsRemoteIndex.value = index;
@@ -458,6 +485,7 @@ export default __render<ProfileDialogProps>(() => {
                           {t('profiles.dialog.remoteUrl')}
                         </span>
                         <Input
+                          size="sm"
                           placeholder={t(
                             'profiles.dialog.remoteUrlPlaceholder',
                           )}
@@ -476,7 +504,7 @@ export default __render<ProfileDialogProps>(() => {
                         <div class="space-y-2">
                           <label class="flex items-center gap-2 text-sm text-on-surface">
                             <input
-                              class="h-4 w-4 accent-primary"
+                              class="h-3.5 w-3.5 accent-primary"
                               type="checkbox"
                               checked={remote.keep.nodes}
                               onChange={(event) =>
@@ -499,7 +527,7 @@ export default __render<ProfileDialogProps>(() => {
                             <>
                               <label class="flex items-center gap-2 text-sm text-on-surface">
                                 <input
-                                  class="h-4 w-4 accent-primary"
+                                  class="h-3.5 w-3.5 accent-primary"
                                   type="checkbox"
                                   checked={remote.keep.groups}
                                   onChange={(event) =>
@@ -517,7 +545,7 @@ export default __render<ProfileDialogProps>(() => {
                               </label>
                               <label class="flex items-center gap-2 text-sm text-on-surface">
                                 <input
-                                  class="h-4 w-4 accent-primary"
+                                  class="h-3.5 w-3.5 accent-primary"
                                   type="checkbox"
                                   checked={remote.keep.route_rules}
                                   onChange={(event) =>
@@ -541,7 +569,7 @@ export default __render<ProfileDialogProps>(() => {
                               </p>
                               <label class="flex items-center gap-2 text-sm text-on-surface">
                                 <input
-                                  class="h-4 w-4 accent-primary"
+                                  class="h-3.5 w-3.5 accent-primary"
                                   type="checkbox"
                                   checked={remote.keep.route_final}
                                   onChange={(event) =>
@@ -559,7 +587,7 @@ export default __render<ProfileDialogProps>(() => {
                               </label>
                               <label class="flex items-center gap-2 text-sm text-on-surface">
                                 <input
-                                  class="h-4 w-4 accent-primary"
+                                  class="h-3.5 w-3.5 accent-primary"
                                   type="checkbox"
                                   checked={remote.keep.route_rules}
                                   onChange={(event) =>
@@ -635,6 +663,7 @@ export default __render<ProfileDialogProps>(() => {
                                   class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.75rem] items-center gap-2"
                                 >
                                   <Input
+                                    size="sm"
                                     class="min-w-0 px-2 text-xs"
                                     placeholder={t(
                                       'profiles.dialog.headerKeyPlaceholder',
@@ -648,6 +677,7 @@ export default __render<ProfileDialogProps>(() => {
                                     }
                                   />
                                   <Input
+                                    size="sm"
                                     class="min-w-0 px-2 text-xs"
                                     placeholder={t(
                                       'profiles.dialog.headerValue',
@@ -667,7 +697,7 @@ export default __render<ProfileDialogProps>(() => {
                                     )}
                                     iconOnly
                                     shape="square"
-                                    size="field"
+                                    size="sm"
                                     tooltip={t('profiles.dialog.removeHeader')}
                                     variant="danger-ghost"
                                     onClick={() =>
@@ -721,6 +751,7 @@ export default __render<ProfileDialogProps>(() => {
                   {t('profiles.dialog.updateIntervalDesc')}
                 </span>
                 <Input
+                  size="sm"
                   min="1"
                   type="number"
                   value={props.updateIntervalHours}
@@ -739,6 +770,7 @@ export default __render<ProfileDialogProps>(() => {
                   {t('profiles.dialog.updateCronDesc')}
                 </span>
                 <Input
+                  size="sm"
                   class="font-mono"
                   value={props.updateCron}
                   placeholder={t('profiles.dialog.updateCronPlaceholder')}
@@ -861,7 +893,7 @@ export default __render<ProfileDialogProps>(() => {
           <div class="flex h-12 justify-end gap-2">
             <Button
               shape="rect"
-              size="md"
+              size="field"
               variant="outline"
               disabled={props.saving}
               onClick={props.onClose}
@@ -870,7 +902,7 @@ export default __render<ProfileDialogProps>(() => {
             </Button>
             <Button
               shape="rect"
-              size="md"
+              size="field"
               variant="solid"
               disabled={props.saving}
               onClick={props.onSubmit}
@@ -880,21 +912,21 @@ export default __render<ProfileDialogProps>(() => {
           </div>
         </PageContent>
       </Page>
-      <Dialog
+      <TemplateJsonEditor
+        content={serializeInlineTemplate(inlineTemplateDraft.value)}
+        loading={false}
         open={templateEditorOpen.value}
+        saveLabel={t('common.save')}
+        saving={false}
         title={t('profiles.dialog.editInlineTemplate')}
-        contentClass="max-w-4xl"
         onClose={() => {
           templateEditorOpen.value = false;
         }}
-      >
-        <div class="h-96 overflow-hidden rounded border border-outline-variant">
-          <CodeEditor
-            value={props.inlineTemplate}
-            onChange={props.onInlineTemplateChange}
-          />
-        </div>
-      </Dialog>
+        onContentChange={(value) => {
+          inlineTemplateDraft.value = parseInlineTemplate(value);
+        }}
+        onSave={saveInlineTemplate}
+      />
       <Dialog
         open={templateViewerOpen.value}
         title={t('profiles.dialog.viewTemplate')}
@@ -920,7 +952,7 @@ export default __render<ProfileDialogProps>(() => {
           <div class="space-y-3">
             <label class="flex items-center gap-2 text-sm text-on-surface">
               <input
-                class="h-4 w-4 accent-primary"
+                class="h-3.5 w-3.5 accent-primary"
                 type="checkbox"
                 checked={keepRemote.keep.nodes}
                 onChange={(event) =>
@@ -942,7 +974,7 @@ export default __render<ProfileDialogProps>(() => {
               <>
                 <label class="flex items-center gap-2 text-sm text-on-surface">
                   <input
-                    class="h-4 w-4 accent-primary"
+                    class="h-3.5 w-3.5 accent-primary"
                     type="checkbox"
                     checked={keepRemote.keep.groups}
                     onChange={(event) =>
@@ -958,7 +990,7 @@ export default __render<ProfileDialogProps>(() => {
                 </label>
                 <label class="flex items-center gap-2 text-sm text-on-surface">
                   <input
-                    class="h-4 w-4 accent-primary"
+                    class="h-3.5 w-3.5 accent-primary"
                     type="checkbox"
                     checked={keepRemote.keep.route_rules}
                     onChange={(event) =>
@@ -978,7 +1010,7 @@ export default __render<ProfileDialogProps>(() => {
               <>
                 <label class="flex items-center gap-2 text-sm text-on-surface">
                   <input
-                    class="h-4 w-4 accent-primary"
+                    class="h-3.5 w-3.5 accent-primary"
                     type="checkbox"
                     checked={keepRemote.keep.route_final}
                     onChange={(event) =>
@@ -995,7 +1027,7 @@ export default __render<ProfileDialogProps>(() => {
                 </label>
                 <label class="flex items-center gap-2 text-sm text-on-surface">
                   <input
-                    class="h-4 w-4 accent-primary"
+                    class="h-3.5 w-3.5 accent-primary"
                     type="checkbox"
                     checked={keepRemote.keep.route_rules}
                     onChange={(event) =>

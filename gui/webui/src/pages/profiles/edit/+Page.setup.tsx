@@ -44,6 +44,15 @@ export function onFinalize(input) {
 }
 `;
 
+type JsonObject = Record<string, unknown>;
+
+function parseInlineTemplate(content: string): JsonObject | null {
+  const value: unknown = JSON.parse(content);
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonObject)
+    : null;
+}
+
 function createEmptyRemote(): ProfileRemote {
   return {
     name: '',
@@ -71,7 +80,7 @@ const formDirty = ref(false);
 const saving = ref(false);
 const name = ref('');
 const templateId = ref('');
-const inlineTemplate = ref('');
+const inlineTemplate = ref<JsonObject | null>(null);
 const remotes = ref<ProfileRemote[]>([createEmptyRemote()]);
 const hook = ref(EMPTY_PROFILE_HOOK_TEMPLATE);
 const interval = ref('');
@@ -98,7 +107,7 @@ const profile = computed(() => {
 function resetForm() {
   name.value = '';
   templateId.value = '';
-  inlineTemplate.value = '';
+  inlineTemplate.value = null;
   remotes.value = [createEmptyRemote()];
   hook.value = EMPTY_PROFILE_HOOK_TEMPLATE;
   interval.value = '';
@@ -119,7 +128,7 @@ watch(profile, (value) => {
   if (!value || formDirty.value) return;
   name.value = value.name;
   templateId.value = value.template_id;
-  inlineTemplate.value = value.inline_template ?? '';
+  inlineTemplate.value = value.inline_template ?? null;
   remotes.value = value.remotes.map((remote) => ({
     ...remote,
     headers: [...remote.headers],
@@ -218,7 +227,7 @@ onDeactivated(deactivateProfileEditDock);
 onBeforeUnmount(deactivateProfileEditDock);
 
 async function submit() {
-  if (!templateId.value && !inlineTemplate.value.trim()) {
+  if (!templateId.value && !inlineTemplate.value) {
     toast.error({ title: i18n.global.t('profiles.dialog.templateRequired') });
     return;
   }
@@ -229,7 +238,7 @@ async function submit() {
     const payload = {
       name: name.value,
       template_id: templateId.value,
-      inline_template: inlineTemplate.value.trim() || null,
+      inline_template: inlineTemplate.value,
       remotes: remotes.value
         .filter((remote) => remote.url.trim())
         .map((remote) => ({
@@ -265,11 +274,15 @@ async function submit() {
 }
 
 async function initializeInlineTemplate() {
-  if (inlineTemplate.value.trim()) return;
+  if (inlineTemplate.value) return;
   try {
     const content = await getDefaultTemplate();
-    if (!templateId.value && !inlineTemplate.value.trim()) {
-      inlineTemplate.value = content;
+    const template = parseInlineTemplate(content);
+    if (!template) {
+      throw new Error(i18n.global.t('profiles.dialog.templateLoadFailed'));
+    }
+    if (!templateId.value && !inlineTemplate.value) {
+      inlineTemplate.value = template;
     }
   } catch (error) {
     toast.error({
@@ -309,7 +322,7 @@ export default __render(() => (
     onTemplateIdChange={(value) => {
       formDirty.value = true;
       templateId.value = value;
-      if (value) inlineTemplate.value = '';
+      if (value) inlineTemplate.value = null;
       else void initializeInlineTemplate();
     }}
     onInlineTemplateChange={(value) => {

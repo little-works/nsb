@@ -8,6 +8,7 @@ export type RequestProxyMode =
 export type { AppConfig } from '@/rs-type/AppConfig';
 export type { AppLanguage } from '@/rs-type/AppLanguage';
 export type { ProfileItem } from '@/rs-type/ProfileItem';
+export type { ProfileDetailResponse } from '@/rs-type/ProfileDetailResponse';
 export type { ProfileHeader } from '@/rs-type/ProfileHeader';
 export type { ProfileRemote } from '@/rs-type/ProfileRemote';
 export type { ProfileRemoteFormat } from '@/rs-type/ProfileRemoteFormat';
@@ -56,7 +57,7 @@ export interface ApiResponse<T> {
 export interface SaveProfilePayload {
   name: string;
   template_id: string;
-  inline_template?: string | null;
+  inline_template?: Record<string, unknown> | null;
   update_interval_hours: number | null;
   update_cron: string | null;
   remotes: Array<{

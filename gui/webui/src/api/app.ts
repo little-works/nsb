@@ -3,7 +3,7 @@ import { Request } from './request';
 import type {
   AppLanguage,
   ProfileListResponse,
-  ProfileItem,
+  ProfileDetailResponse,
   RuntimeStatus,
   RuntimeSettings,
   SaveProfilePayload,
@@ -52,7 +52,7 @@ export function listProfiles() {
 }
 
 export function getProfile(id: string) {
-  return request.get<ProfileItem>(`/api/profiles/${id}`);
+  return request.get<ProfileDetailResponse>(`/api/profiles/${id}`);
 }
 
 export function createProfile(payload: Omit<SaveProfilePayload, 'id'>) {
