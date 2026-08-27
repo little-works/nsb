@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::app::controller::AppController;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
-use crate::state::KernelStatus;
+use crate::state::KernelInfo;
 use nsb_core::{RemoteFormat, RemoteKeepFields, RemoteSource, build_config, parse_remote};
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 pub type SharedGuiRuntime = Arc<Mutex<GuiRuntime>>;
 
@@ -17,6 +17,7 @@ pub struct GuiRuntime {
     pub singbox_host: SingBoxHost,
     pub profile_host: ProfileHost,
     pub updating_profiles: HashSet<String>,
+    kernel_status_tx: broadcast::Sender<KernelInfo>,
 }
 
 impl GuiRuntime {
@@ -40,12 +41,14 @@ impl GuiRuntime {
             app_config_store.save(&controller.state.gui_config).await?;
         }
 
+        let (kernel_status_tx, _) = broadcast::channel(16);
         Ok(Self {
             app_config_store,
             controller,
             singbox_host,
             profile_host,
             updating_profiles: HashSet::new(),
+            kernel_status_tx,
         })
     }
 
@@ -54,31 +57,52 @@ impl GuiRuntime {
     }
 
     pub async fn toggle_kernel(&mut self) -> Result<bool, String> {
-        self.controller
+        let result = self
+            .controller
             .toggle_kernel(
                 &mut self.singbox_host,
                 &self.profile_host,
                 &self.app_config_store,
             )
-            .await
+            .await;
+        self.publish_kernel_status();
+        result
+    }
+
+    pub async fn restart_kernel(&mut self) -> Result<(), String> {
+        let result = self
+            .controller
+            .restart_kernel(
+                &mut self.singbox_host,
+                &self.profile_host,
+                &self.app_config_store,
+            )
+            .await;
+        self.publish_kernel_status();
+        result
     }
 
     pub async fn replace_kernel_binary(&mut self, bytes: &[u8]) -> Result<(), String> {
-        let was_running = self.singbox_host.running_pid().await?.is_some();
-        if was_running {
-            self.controller.stop_kernel(&mut self.singbox_host).await?;
+        let result = async {
+            let was_running = self.singbox_host.running_pid().await?.is_some();
+            if was_running {
+                self.controller.stop_kernel(&mut self.singbox_host).await?;
+            }
+            self.singbox_host.install_binary(bytes).await?;
+            if was_running {
+                self.controller
+                    .start_kernel(
+                        &mut self.singbox_host,
+                        &self.profile_host,
+                        &self.app_config_store,
+                    )
+                    .await?;
+            }
+            Ok(())
         }
-        self.singbox_host.install_binary(bytes).await?;
-        if was_running {
-            self.controller
-                .start_kernel(
-                    &mut self.singbox_host,
-                    &self.profile_host,
-                    &self.app_config_store,
-                )
-                .await?;
-        }
-        Ok(())
+        .await;
+        self.publish_kernel_status();
+        result
     }
 
     pub async fn create_profile(
@@ -116,14 +140,20 @@ impl GuiRuntime {
     }
 
     pub async fn delete_profile(&mut self, id: String) -> Result<(), String> {
-        self.controller
+        let previous_status = self.controller.state.kernel.status;
+        let result = self
+            .controller
             .delete_profile(
                 id,
                 &mut self.singbox_host,
                 &self.profile_host,
                 &self.app_config_store,
             )
-            .await
+            .await;
+        if self.controller.state.kernel.status != previous_status {
+            self.publish_kernel_status();
+        }
+        result
     }
 
     pub async fn read_profile_runtime(&self, id: &str) -> Result<String, String> {
@@ -139,14 +169,17 @@ impl GuiRuntime {
     }
 
     pub async fn activate_profile(&mut self, id: String) -> Result<(), String> {
-        self.controller
+        let result = self
+            .controller
             .activate_profile(
                 id,
                 &mut self.singbox_host,
                 &self.profile_host,
                 &self.app_config_store,
             )
-            .await
+            .await;
+        self.publish_kernel_status();
+        result
     }
 
     pub async fn save_runtime_settings(
@@ -173,19 +206,35 @@ impl GuiRuntime {
     }
 
     pub async fn auto_start_kernel_if_needed(&mut self) -> Result<bool, String> {
-        self.controller
+        let result = self
+            .controller
             .auto_start_kernel_if_needed(
                 &mut self.singbox_host,
                 &self.profile_host,
                 &self.app_config_store,
             )
-            .await
+            .await;
+        self.publish_kernel_status();
+        result
     }
 
     pub async fn shutdown_kernel_on_exit(&mut self) -> Result<(), String> {
-        self.controller
+        let result = self
+            .controller
             .shutdown_kernel_on_exit(&mut self.singbox_host)
-            .await
+            .await;
+        self.publish_kernel_status();
+        result
+    }
+
+    pub fn subscribe_kernel_status(&self) -> broadcast::Receiver<KernelInfo> {
+        self.kernel_status_tx.subscribe()
+    }
+
+    fn publish_kernel_status(&self) {
+        let _ = self
+            .kernel_status_tx
+            .send(self.controller.state.kernel.clone());
     }
 }
 
@@ -373,26 +422,12 @@ pub async fn update_profile_runtime(
                 .await?;
 
             if restart_current_kernel && is_current {
-                let GuiRuntime {
-                    controller,
-                    singbox_host,
-                    profile_host,
-                    app_config_store,
-                    ..
-                } = &mut *guard;
-
                 // Refresh is explicitly asked to apply the active Profile to the
                 // core. The status may be stale when the core exited between UI
-                // snapshots, so synchronize it before deciding whether a stop is
-                // needed. `start_kernel` then either restarts a live core or starts
-                // the active Profile from its newly persisted runtime config.
-                controller.sync_runtime(singbox_host).await;
-                if controller.state.kernel.status == KernelStatus::Running {
-                    controller.stop_kernel(singbox_host).await?;
-                }
-                controller
-                    .start_kernel(singbox_host, profile_host, app_config_store)
-                    .await?;
+                // snapshots. The shared restart wrapper synchronizes it before
+                // applying the newly persisted runtime configuration and publishes
+                // only the final kernel snapshot.
+                guard.restart_kernel().await?;
             }
             Ok(())
         }

@@ -8,10 +8,11 @@ use crate::config::AppConfig;
 
 const PROFILE_ID_LENGTH: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum KernelStatus {
     Running,
     Stopped,
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -175,6 +176,11 @@ impl AppState {
         self.kernel.status = KernelStatus::Stopped;
         self.kernel.runtime_source = KernelRuntimeSource::None;
     }
+
+    pub fn mark_kernel_failed(&mut self) {
+        self.kernel.status = KernelStatus::Failed;
+        self.kernel.runtime_source = KernelRuntimeSource::None;
+    }
 }
 
 pub fn current_timestamp() -> u64 {
@@ -233,7 +239,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::generate_profile_id;
+    use super::{AppState, KernelRuntimeSource, KernelStatus, generate_profile_id};
+    use crate::config::AppConfig;
 
     #[test]
     fn generates_eight_character_lowercase_alphanumeric_profile_ids() {
@@ -243,5 +250,15 @@ mod tests {
             id.bytes()
                 .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
         );
+    }
+
+    #[test]
+    fn explicit_stop_clears_a_failed_kernel_status() {
+        let mut state = AppState::load(AppConfig::default());
+        state.mark_kernel_failed();
+        state.mark_kernel_stopped();
+
+        assert_eq!(state.kernel.status, KernelStatus::Stopped);
+        assert_eq!(state.kernel.runtime_source, KernelRuntimeSource::None);
     }
 }

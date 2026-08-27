@@ -2,7 +2,12 @@ import type {
   CoreApiConnectionsData,
   CoreApiLogsData,
   CoreApiTrafficData,
+  RuntimeStatus,
 } from '@/types';
+import { toast } from '@/components/toast';
+import { i18n } from '@/i18n';
+import { runtimeQueryKey } from '@/store/app';
+import { useQueryClient } from '@tanstack/vue-query';
 import { useDocumentVisibility } from '@vueuse/core';
 import { onScopeDispose, readonly, ref, watch } from 'vue';
 
@@ -13,13 +18,33 @@ const connections = ref<CoreApiConnectionsData | null>(null);
 const connectionState = ref<'connecting' | 'connected' | 'disconnected'>(
   'disconnected',
 );
+const failureNotificationVersion = ref(0);
 const logListeners = new Set<(log: CoreApiLogsData | string) => void>();
+const runtimeListeners = new Set<(runtime: RuntimeStatus) => void>();
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isRuntimeStatus(value: unknown): value is RuntimeStatus {
+  if (!isRecord(value) || !isRecord(value.kernel)) {
+    return false;
+  }
+  const kernel = value.kernel;
+  return (
+    typeof kernel.binary_path === 'string' &&
+    typeof kernel.installed === 'boolean' &&
+    typeof kernel.data_dir === 'string' &&
+    typeof kernel.config_path === 'string' &&
+    typeof kernel.version === 'string' &&
+    typeof kernel.last_started_at === 'string' &&
+    (kernel.status === 'Running' ||
+      kernel.status === 'Stopped' ||
+      kernel.status === 'Failed')
+  );
 }
 
 function scheduleReconnect() {
@@ -72,6 +97,8 @@ function connect() {
       } else if (message.type === 'logs') {
         const log = message.data as CoreApiLogsData | string;
         logListeners.forEach((listener) => listener(log));
+      } else if (message.type === 'runtime' && isRuntimeStatus(message.data)) {
+        runtimeListeners.forEach((listener) => listener(message.data));
       }
     } catch (error) {
       console.error('Failed to parse score stream message:', error);
@@ -107,12 +134,32 @@ function subscribeScoreLogs(listener: (log: CoreApiLogsData | string) => void) {
   return () => logListeners.delete(listener);
 }
 
+function subscribeRuntime(listener: (runtime: RuntimeStatus) => void) {
+  runtimeListeners.add(listener);
+  return () => runtimeListeners.delete(listener);
+}
+
 export function useScoreStreamConnection() {
   if (import.meta.env.SSR) {
     return;
   }
 
+  const queryClient = useQueryClient();
   const visibility = useDocumentVisibility();
+  const unsubscribeRuntime = subscribeRuntime((runtime) => {
+    const previous = queryClient.getQueryData<RuntimeStatus>(runtimeQueryKey);
+    queryClient.setQueryData(runtimeQueryKey, runtime);
+    if (
+      runtime.kernel.status === 'Failed' &&
+      previous?.kernel.status !== 'Failed'
+    ) {
+      failureNotificationVersion.value += 1;
+      toast.error({
+        title: i18n.global.t('errors.kernelStartFailed'),
+        content: i18n.global.t('errors.kernelStartFailedAction'),
+      });
+    }
+  });
   const stop = watch(
     visibility,
     (state) => {
@@ -125,6 +172,7 @@ export function useScoreStreamConnection() {
     { immediate: true },
   );
   onScopeDispose(() => {
+    unsubscribeRuntime();
     stop();
     disconnect();
   });
@@ -135,6 +183,7 @@ export function useScoreStreamData() {
     traffic: readonly(traffic),
     connections: readonly(connections),
     connectionState: readonly(connectionState),
+    failureNotificationVersion: readonly(failureNotificationVersion),
     subscribeLogs: subscribeScoreLogs,
   };
 }

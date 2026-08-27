@@ -19,6 +19,7 @@ export {
   listTemplates,
   refreshProfile,
   refreshProfileById,
+  restartKernel,
   saveAppLanguage,
   saveSettings,
   saveProfileContent,

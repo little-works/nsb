@@ -29,6 +29,10 @@ export function toggleKernel() {
   return request.post<RuntimeStatus>('/api/kernel/toggle');
 }
 
+export function restartKernel() {
+  return profileActivationRequest.post<RuntimeStatus>('/api/kernel/restart');
+}
+
 export function fetchKernelVersion() {
   return request.get<string>('/api/kernel/version');
 }

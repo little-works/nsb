@@ -120,6 +120,25 @@ pub async fn toggle_kernel(
     }
 }
 
+pub async fn restart_kernel(
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<RuntimeStatusResponse>> {
+    let mut guard = ctx.runtime.lock().await;
+    let result = guard.restart_kernel().await;
+    guard.sync_runtime().await;
+    let snapshot = RuntimeStatusResponse {
+        kernel: guard.controller.state.kernel.clone(),
+    };
+
+    match result {
+        Ok(()) => Json(ApiResponse::success(
+            String::from("Sing-box core restarted."),
+            Some(snapshot),
+        )),
+        Err(err) => Json(ApiResponse::failure(err, Some(snapshot))),
+    }
+}
+
 pub async fn import_kernel_binary(
     State(ctx): State<RouteState>,
     mut multipart: Multipart,

@@ -71,18 +71,21 @@ impl AppController {
             return Err(String::from("The sing-box core is already running."));
         }
 
-        let current = self
-            .current_profile()
-            .cloned()
-            .ok_or_else(|| String::from("No Profile is active. Add and select a Profile first."))?;
-        let path = self
-            .ensure_profile_runtime(&current, profile_host, app_config_store)
-            .await?;
-        let source = path.display().to_string();
-        match singbox_host
-            .start(&source, &self.state.gui_config, current.hook.as_deref())
-            .await
-        {
+        let result = async {
+            let current = self.current_profile().cloned().ok_or_else(|| {
+                String::from("No Profile is active. Add and select a Profile first.")
+            })?;
+            let path = self
+                .ensure_profile_runtime(&current, profile_host, app_config_store)
+                .await?;
+            let source = path.display().to_string();
+            singbox_host
+                .start(&source, &self.state.gui_config, current.hook.as_deref())
+                .await
+        }
+        .await;
+
+        match result {
             Ok(launch_config) => {
                 self.state.kernel.controller_addr = launch_config.external_controller;
                 self.state.kernel.controller_secret = launch_config.secret;
@@ -94,7 +97,11 @@ impl AppController {
                 self.kernel_started_by_this_instance = true;
                 Ok(())
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                self.state.mark_kernel_failed();
+                self.kernel_started_by_this_instance = false;
+                Err(err)
+            }
         }
     }
 
@@ -128,6 +135,20 @@ impl AppController {
                 .await?;
             Ok(true)
         }
+    }
+
+    pub async fn restart_kernel(
+        &mut self,
+        singbox_host: &mut SingBoxHost,
+        profile_host: &ProfileHost,
+        app_config_store: &AppConfigStore,
+    ) -> Result<(), String> {
+        self.sync_kernel_runtime(singbox_host).await;
+        if self.state.kernel.status == crate::state::KernelStatus::Running {
+            self.stop_kernel(singbox_host).await?;
+        }
+        self.start_kernel(singbox_host, profile_host, app_config_store)
+            .await
     }
 
     pub async fn create_profile(
@@ -650,6 +671,7 @@ impl AppController {
 
     async fn sync_kernel_runtime(&mut self, singbox_host: &mut SingBoxHost) {
         self.state.kernel.installed = singbox_host.is_installed();
+        let previous_status = self.state.kernel.status;
         match singbox_host.running_pid().await {
             Ok(Some(pid)) => {
                 if let Ok(Some(launch_config)) = singbox_host.load_launch_config().await {
@@ -672,19 +694,50 @@ impl AppController {
                 }
             }
             Ok(None) => {
-                self.state.kernel.status = crate::state::KernelStatus::Stopped;
+                self.state.kernel.status = offline_kernel_status(previous_status);
                 self.kernel_started_by_this_instance = false;
                 self.state.kernel.controller_addr = String::from("Assigned randomly at startup");
                 self.state.kernel.controller_secret = String::from("Generated at startup");
                 self.state.kernel.runtime_source = KernelRuntimeSource::None;
             }
             Err(_) => {
-                self.state.kernel.status = crate::state::KernelStatus::Stopped;
+                self.state.kernel.status = offline_kernel_status(previous_status);
                 self.kernel_started_by_this_instance = false;
                 self.state.kernel.controller_addr = String::from("Assigned randomly at startup");
                 self.state.kernel.controller_secret = String::from("Generated at startup");
                 self.state.kernel.runtime_source = KernelRuntimeSource::None;
             }
         }
+    }
+}
+
+fn offline_kernel_status(previous_status: crate::state::KernelStatus) -> crate::state::KernelStatus {
+    match previous_status {
+        crate::state::KernelStatus::Failed => crate::state::KernelStatus::Failed,
+        crate::state::KernelStatus::Running | crate::state::KernelStatus::Stopped => {
+            crate::state::KernelStatus::Stopped
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::offline_kernel_status;
+    use crate::state::KernelStatus;
+
+    #[test]
+    fn preserves_failed_status_without_a_running_process() {
+        assert_eq!(
+            offline_kernel_status(KernelStatus::Failed),
+            KernelStatus::Failed
+        );
+    }
+
+    #[test]
+    fn marks_a_disappeared_running_process_as_stopped() {
+        assert_eq!(
+            offline_kernel_status(KernelStatus::Running),
+            KernelStatus::Stopped
+        );
     }
 }

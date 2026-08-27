@@ -10,7 +10,7 @@ import { computed, type ComputedRef } from 'vue';
 import { usePageContext } from 'vike-vue/usePageContext';
 import { resolveAppPageType } from '@/shared/page';
 
-const runtimeQueryKey = ['runtime'];
+export const runtimeQueryKey = ['runtime'];
 const settingsQueryKey = ['settings'];
 const profilesQueryKey = ['profiles'];
 const templatesQueryKey = ['templates'];

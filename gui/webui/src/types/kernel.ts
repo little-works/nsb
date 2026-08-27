@@ -1,3 +1,5 @@
+import type { RuntimeStatus } from './app';
+
 export interface CoreApiConfig {
   port: number;
   'socks-port': number;
@@ -81,6 +83,7 @@ export type CoreApiWsDataMap = {
   memory: CoreApiMemoryData;
   traffic: CoreApiTrafficData;
   connections: CoreApiConnectionsData;
+  runtime: RuntimeStatus;
 };
 
 export interface CoreApiWsMessage<K extends keyof CoreApiWsDataMap> {

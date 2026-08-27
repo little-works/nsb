@@ -81,8 +81,13 @@ const enUS = {
   traffic: {
     running: 'Running',
     stopped: 'Stopped',
+    failed: 'Failed',
+    start: 'Start core',
+    restart: 'Restart core',
+    retry: 'Retry core',
     noCore: 'No core',
     noCoreAction: 'Sing-box is not installed. Go to Settings.',
+    failedAction: 'Kernel startup failed. Go to kernel logs.',
   },
   connections: {
     title: 'Connections',
@@ -295,6 +300,8 @@ const enUS = {
     kernelImport: 'Failed to import the sing-box core.',
     kernelDownload: 'Failed to download the sing-box core.',
     kernelAction: 'Kernel operation failed',
+    kernelStartFailed: 'Kernel startup failed',
+    kernelStartFailedAction: 'Open kernel logs to view the details.',
     kernelImported: 'Kernel imported.',
     kernelInstalled: 'Installed sing-box {version}.',
     confirmKernelDownload:
@@ -392,8 +399,13 @@ const zhCN = {
   traffic: {
     running: '运行中',
     stopped: '已停止',
+    failed: '启动失败',
+    start: '启动内核',
+    restart: '重启内核',
+    retry: '重试启动',
     noCore: '未安装',
     noCoreAction: '未安装 Sing-box，前往设置。',
+    failedAction: '内核启动失败，前往内核日志查看详情。',
   },
   connections: {
     title: '连接',
@@ -593,6 +605,8 @@ const zhCN = {
     kernelImport: '导入 sing-box 内核失败。',
     kernelDownload: '下载 sing-box 内核失败。',
     kernelAction: '内核操作失败',
+    kernelStartFailed: '内核启动失败',
+    kernelStartFailedAction: '请前往内核日志查看详情。',
     kernelImported: '内核已导入。',
     kernelInstalled: '已安装 sing-box {version}。',
     confirmKernelDownload:

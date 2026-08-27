@@ -34,7 +34,7 @@ export interface KernelInfo {
   data_dir: string;
   config_path: string;
   version: string;
-  status: 'Running' | 'Stopped';
+  status: 'Running' | 'Stopped' | 'Failed';
   last_started_at: string;
 }
 

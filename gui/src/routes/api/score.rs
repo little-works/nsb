@@ -243,6 +243,10 @@ impl ControllerConfig {
 }
 
 async fn relay_score_stream(socket: WebSocket, ctx: RouteState) {
+    let mut kernel_status_receiver = {
+        let guard = ctx.runtime.lock().await;
+        guard.subscribe_kernel_status()
+    };
     let (mut client_sender, mut client_receiver) = socket.split();
     let (sender, mut receiver) = mpsc::channel(64);
     let logs_task = tokio::spawn(relay_controller_websocket(
@@ -272,6 +276,21 @@ async fn relay_score_stream(socket: WebSocket, ctx: RouteState) {
                 };
                 if client_sender.send(Message::Text(message.into())).await.is_err() {
                     break;
+                }
+            }
+            kernel = kernel_status_receiver.recv() => {
+                match kernel {
+                    Ok(kernel) => {
+                        let message = serde_json::json!({
+                            "type": "runtime",
+                            "data": { "kernel": kernel },
+                        }).to_string();
+                        if client_sender.send(Message::Text(message.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
         }

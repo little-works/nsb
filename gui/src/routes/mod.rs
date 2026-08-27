@@ -60,6 +60,7 @@ pub fn build_router(
             get(api::kernel::get_latest_kernel_release),
         )
         .route("/api/kernel/toggle", post(api::kernel::toggle_kernel))
+        .route("/api/kernel/restart", post(api::kernel::restart_kernel))
         .route(
             "/api/kernel/import",
             post(api::kernel::import_kernel_binary).layer(DefaultBodyLimit::max(128 * 1024 * 1024)),
