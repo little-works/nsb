@@ -7,7 +7,10 @@ import { Page, PageContent } from '@/components/page-content';
 import { CodeEditor } from '@/components/code-editor';
 import { Dialog } from '@/components/dialog';
 import { Popover } from '@/components/popover';
+import { Checkbox } from '@/components/checkbox';
+import { Radio } from '@/components/radio';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
+import { createDefaultProfileRemoteKeepFields } from '@/pages/profiles/profile-keep-fields';
 import TemplateJsonEditor from '@/pages/profiles/profile-node-editor.setup';
 import type { ProfileRemote, ProfileTemplate } from '@/types';
 import { useMounted } from '@vueuse/core';
@@ -24,13 +27,28 @@ import {
   LinkOutlined,
   ScheduleOutlined,
 } from '@vicons/material';
-import { ref } from 'vue';
+import { ref, toRaw, type VNode } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const HOOK_EXAMPLE_CODE =
   "input.singbox.log ??= {};\ninput.singbox.log.level = 'debug';";
 
 type JsonObject = Record<string, unknown>;
+
+interface KeepFieldLeaf {
+  id: string;
+  label: string;
+  checked: boolean;
+  setChecked: (keep: ProfileRemote['keep'], checked: boolean) => void;
+}
+
+interface KeepFieldBranch {
+  id: string;
+  label: string;
+  children: KeepFieldNode[];
+}
+
+type KeepFieldNode = KeepFieldLeaf | KeepFieldBranch;
 
 function serializeInlineTemplate(template: JsonObject | null) {
   return template ? JSON.stringify(template, null, 2) : '';
@@ -102,6 +120,22 @@ function updateRemote(index: number, next: Partial<ProfileRemote>) {
   );
 }
 
+function updateKeepFields(
+  index: number,
+  leaves: KeepFieldLeaf[],
+  checked: boolean,
+) {
+  const remote = props.remotes[index];
+  if (!remote) return;
+  const keep = structuredClone(toRaw(remote.keep));
+  for (const leaf of leaves) leaf.setChecked(keep, checked);
+  updateRemote(index, { keep });
+}
+
+function descendantLeaves(node: KeepFieldNode): KeepFieldLeaf[] {
+  return 'children' in node ? node.children.flatMap(descendantLeaves) : [node];
+}
+
 function removeRemote(index: number) {
   props.onRemotesChange(
     props.remotes.filter((_, remoteIndex) => remoteIndex !== index),
@@ -125,12 +159,7 @@ function addRemote() {
       url: '',
       headers: [],
       format: 'clash',
-      keep: {
-        nodes: true,
-        groups: false,
-        route_final: false,
-        route_rules: false,
-      },
+      keep: createDefaultProfileRemoteKeepFields(),
     },
   ]);
 }
@@ -192,6 +221,334 @@ export default __render<ProfileDialogProps>(() => {
     keepFieldsRemoteIndex.value == null
       ? null
       : props.remotes[keepFieldsRemoteIndex.value];
+  const leaf = (
+    id: string,
+    checked: boolean,
+    setChecked: KeepFieldLeaf['setChecked'],
+    labelKey = id.split('.').at(-1) ?? id,
+  ): KeepFieldLeaf => ({
+    id,
+    label: t(`profiles.dialog.keepField.${labelKey}`),
+    checked,
+    setChecked,
+  });
+  const keepFieldNodes: KeepFieldNode[] = !keepRemote
+    ? []
+    : keepRemote.format === 'clash'
+      ? [
+          leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
+            keep.outbounds = checked;
+          }),
+          {
+            id: 'clash-route',
+            label: t('profiles.dialog.keepParentClashRoute'),
+            children: [
+              leaf(
+                'route.rules',
+                keepRemote.keep.route.rules,
+                (keep, checked) => {
+                  keep.route.rules = checked;
+                },
+              ),
+            ],
+          },
+        ]
+      : [
+          leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
+            keep.outbounds = checked;
+          }),
+          leaf('inbounds', keepRemote.keep.inbounds, (keep, checked) => {
+            keep.inbounds = checked;
+          }),
+          {
+            id: 'dns',
+            label: t('profiles.dialog.keepSingboxDns'),
+            children: [
+              leaf(
+                'dns.servers',
+                keepRemote.keep.dns.servers,
+                (keep, checked) => {
+                  keep.dns.servers = checked;
+                },
+              ),
+              leaf('dns.rules', keepRemote.keep.dns.rules, (keep, checked) => {
+                keep.dns.rules = checked;
+              }),
+              leaf(
+                'dns.final',
+                keepRemote.keep.dns.final,
+                (keep, checked) => {
+                  keep.dns.final = checked;
+                },
+                'dns_final',
+              ),
+              leaf(
+                'dns.strategy',
+                keepRemote.keep.dns.strategy,
+                (keep, checked) => {
+                  keep.dns.strategy = checked;
+                },
+              ),
+              leaf(
+                'dns.disable_cache',
+                keepRemote.keep.dns.disable_cache,
+                (keep, checked) => {
+                  keep.dns.disable_cache = checked;
+                },
+              ),
+              leaf(
+                'dns.disable_expire',
+                keepRemote.keep.dns.disable_expire,
+                (keep, checked) => {
+                  keep.dns.disable_expire = checked;
+                },
+              ),
+              leaf(
+                'dns.independent_cache',
+                keepRemote.keep.dns.independent_cache,
+                (keep, checked) => {
+                  keep.dns.independent_cache = checked;
+                },
+              ),
+              leaf(
+                'dns.cache_capacity',
+                keepRemote.keep.dns.cache_capacity,
+                (keep, checked) => {
+                  keep.dns.cache_capacity = checked;
+                },
+              ),
+              {
+                id: 'dns-optimistic',
+                label: t('profiles.dialog.keepField.optimistic'),
+                children: [
+                  leaf(
+                    'dns.optimistic.enabled',
+                    keepRemote.keep.dns.optimistic.enabled,
+                    (keep, checked) => {
+                      keep.dns.optimistic.enabled = checked;
+                    },
+                  ),
+                  leaf(
+                    'dns.optimistic.timeout',
+                    keepRemote.keep.dns.optimistic.timeout,
+                    (keep, checked) => {
+                      keep.dns.optimistic.timeout = checked;
+                    },
+                  ),
+                ],
+              },
+              leaf(
+                'dns.timeout',
+                keepRemote.keep.dns.timeout,
+                (keep, checked) => {
+                  keep.dns.timeout = checked;
+                },
+              ),
+              leaf(
+                'dns.reverse_mapping',
+                keepRemote.keep.dns.reverse_mapping,
+                (keep, checked) => {
+                  keep.dns.reverse_mapping = checked;
+                },
+              ),
+              leaf(
+                'dns.client_subnet',
+                keepRemote.keep.dns.client_subnet,
+                (keep, checked) => {
+                  keep.dns.client_subnet = checked;
+                },
+              ),
+              leaf(
+                'dns.fakeip',
+                keepRemote.keep.dns.fakeip,
+                (keep, checked) => {
+                  keep.dns.fakeip = checked;
+                },
+              ),
+            ],
+          },
+          {
+            id: 'singbox-route',
+            label: t('profiles.dialog.keepParentSingboxRoute'),
+            children: [
+              leaf(
+                'route.rules',
+                keepRemote.keep.route.rules,
+                (keep, checked) => {
+                  keep.route.rules = checked;
+                },
+              ),
+              leaf(
+                'route.rule_set',
+                keepRemote.keep.route.rule_set,
+                (keep, checked) => {
+                  keep.route.rule_set = checked;
+                },
+              ),
+              leaf(
+                'route.final',
+                keepRemote.keep.route.final,
+                (keep, checked) => {
+                  keep.route.final = checked;
+                },
+                'route_final',
+              ),
+              ...(
+                [
+                  'auto_detect_interface',
+                  'override_android_vpn',
+                  'default_interface',
+                  'default_mark',
+                  'find_process',
+                  'find_neighbor',
+                  'dhcp_lease_files',
+                  'default_http_client',
+                  'default_domain_resolver',
+                  'default_network_strategy',
+                  'default_network_type',
+                  'default_fallback_network_type',
+                  'default_fallback_delay',
+                ] as const
+              ).map((key) =>
+                leaf(
+                  `route.${key}`,
+                  keepRemote.keep.route[key],
+                  (keep, checked) => {
+                    keep.route[key] = checked;
+                  },
+                ),
+              ),
+            ],
+          },
+          {
+            id: 'singbox-experimental',
+            label: t('profiles.dialog.keepParentSingboxExperimental'),
+            children: [
+              {
+                id: 'experimental-cache-file',
+                label: t('profiles.dialog.keepSingboxCacheFile'),
+                children: (
+                  [
+                    'enabled',
+                    'path',
+                    'cache_id',
+                    'store_fakeip',
+                    'store_rdrc',
+                    'rdrc_timeout',
+                    'store_dns',
+                  ] as const
+                ).map((key) =>
+                  leaf(
+                    `experimental.cache_file.${key}`,
+                    keepRemote.keep.experimental.cache_file[key],
+                    (keep, checked) => {
+                      keep.experimental.cache_file[key] = checked;
+                    },
+                  ),
+                ),
+              },
+              {
+                id: 'experimental-clash-api',
+                label: t('profiles.dialog.keepSingboxClashApi'),
+                children: (
+                  [
+                    'external_controller',
+                    'external_ui',
+                    'external_ui_download_url',
+                    'external_ui_download_detour',
+                    'secret',
+                    'default_mode',
+                    'access_control_allow_origin',
+                    'access_control_allow_private_network',
+                    'store_mode',
+                    'store_selected',
+                    'store_fakeip',
+                    'cache_file',
+                    'cache_id',
+                  ] as const
+                ).map((key) =>
+                  leaf(
+                    `experimental.clash_api.${key}`,
+                    keepRemote.keep.experimental.clash_api[key],
+                    (keep, checked) => {
+                      keep.experimental.clash_api[key] = checked;
+                    },
+                  ),
+                ),
+              },
+              leaf(
+                'experimental.v2ray_api',
+                keepRemote.keep.experimental.v2ray_api,
+                (keep, checked) => {
+                  keep.experimental.v2ray_api = checked;
+                },
+              ),
+            ],
+          },
+        ];
+  function renderKeepNode(node: KeepFieldNode, nodeIndex: number): VNode {
+    const remoteIndex = keepFieldsRemoteIndex.value;
+    const rowClass = [
+      'text-on-surface',
+      nodeIndex > 0 ? 'border-t border-outline-variant/50' : '',
+    ];
+    if ('children' in node) {
+      const leaves = descendantLeaves(node);
+      const selectedCount = leaves.filter((leaf) => leaf.checked).length;
+      const checked = selectedCount === leaves.length;
+      const indeterminate = selectedCount > 0 && !checked;
+      return (
+        <section key={node.id} class={rowClass}>
+          <label
+            class={[
+              'flex h-10 items-center gap-3 px-3',
+              'bg-surface-container-low',
+              'cursor-pointer hover:bg-surface-container',
+            ]}
+          >
+            <Checkbox
+              checked={checked}
+              indeterminate={indeterminate}
+              onChange={(nextChecked) => {
+                if (remoteIndex == null) return;
+                updateKeepFields(
+                  remoteIndex,
+                  leaves,
+                  indeterminate ? true : nextChecked,
+                );
+              }}
+            />
+            <span class="min-w-0 truncate font-mono text-sm font-semibold">
+              {node.label}
+            </span>
+          </label>
+          <div class="ml-5 border-l border-outline-variant">
+            {node.children.map(renderKeepNode)}
+          </div>
+        </section>
+      );
+    }
+    return (
+      <label
+        key={node.id}
+        class={[
+          'flex h-10 items-center gap-3 px-3',
+          'bg-surface-container-lowest',
+          ...rowClass,
+          'cursor-pointer hover:bg-surface-container-low',
+        ]}
+      >
+        <Checkbox
+          checked={node.checked}
+          onChange={(checked) => {
+            if (remoteIndex == null) return;
+            updateKeepFields(remoteIndex, [node], checked);
+          }}
+        />
+        <span class="min-w-0 truncate text-sm font-medium">{node.label}</span>
+      </label>
+    );
+  }
   const remoteLabel = (remote: ProfileRemote, index: number) =>
     remote.name.trim() ||
     t('profiles.dialog.remotePlaceholder', { index: index + 1 });
@@ -438,32 +795,35 @@ export default __render<ProfileDialogProps>(() => {
                             }
                           />
                         </label>
-                        <label class="block min-w-0">
-                          <span class="mb-1 block text-xs font-medium text-on-surface-variant">
+                        <fieldset class="min-w-0">
+                          <legend class="mb-1 block text-xs font-medium text-on-surface-variant">
                             {t('profiles.dialog.remoteFormat')}
-                          </span>
-                          <Select
-                            ariaLabel={t('profiles.dialog.remoteFormat')}
-                            block
-                            size="sm"
-                            modelValue={remote.format}
-                            options={[
-                              {
-                                value: 'clash',
-                                label: t('profiles.dialog.remoteFormatClash'),
-                              },
-                              {
-                                value: 'singbox',
-                                label: t('profiles.dialog.remoteFormatSingbox'),
-                              },
-                            ]}
-                            onUpdateModelValue={(value) =>
-                              updateRemote(index, {
-                                format: value as ProfileRemote['format'],
-                              })
-                            }
-                          />
-                        </label>
+                          </legend>
+                          <div class="flex h-9 items-center gap-4">
+                            <label class="flex h-9 items-center gap-2 text-sm text-on-surface">
+                              <Radio
+                                checked={remote.format === 'clash'}
+                                name={`remote-format-${index}`}
+                                value="clash"
+                                onChange={() =>
+                                  updateRemote(index, { format: 'clash' })
+                                }
+                              />
+                              {t('profiles.dialog.remoteFormatClash')}
+                            </label>
+                            <label class="flex h-9 items-center gap-2 text-sm text-on-surface">
+                              <Radio
+                                checked={remote.format === 'singbox'}
+                                name={`remote-format-${index}`}
+                                value="singbox"
+                                onChange={() =>
+                                  updateRemote(index, { format: 'singbox' })
+                                }
+                              />
+                              {t('profiles.dialog.remoteFormatSingbox')}
+                            </label>
+                          </div>
+                        </fieldset>
                         <div>
                           <span class="mb-1 block text-xs font-medium text-on-surface-variant">
                             {t('profiles.dialog.keepFields')}
@@ -497,116 +857,6 @@ export default __render<ProfileDialogProps>(() => {
                           }
                         />
                       </label>
-                      <div class="hidden">
-                        <p class="mb-2 text-xs font-medium text-on-surface-variant">
-                          {t('profiles.dialog.keepFields')}
-                        </p>
-                        <div class="space-y-2">
-                          <label class="flex items-center gap-2 text-sm text-on-surface">
-                            <input
-                              class="h-3.5 w-3.5 accent-primary"
-                              type="checkbox"
-                              checked={remote.keep.nodes}
-                              onChange={(event) =>
-                                updateRemote(index, {
-                                  keep: {
-                                    ...remote.keep,
-                                    nodes: (event.target as HTMLInputElement)
-                                      .checked,
-                                  },
-                                })
-                              }
-                            />
-                            {t(
-                              remote.format === 'clash'
-                                ? 'profiles.dialog.keepClashProxies'
-                                : 'profiles.dialog.keepSingboxOutbounds',
-                            )}
-                          </label>
-                          {remote.format === 'clash' ? (
-                            <>
-                              <label class="flex items-center gap-2 text-sm text-on-surface">
-                                <input
-                                  class="h-3.5 w-3.5 accent-primary"
-                                  type="checkbox"
-                                  checked={remote.keep.groups}
-                                  onChange={(event) =>
-                                    updateRemote(index, {
-                                      keep: {
-                                        ...remote.keep,
-                                        groups: (
-                                          event.target as HTMLInputElement
-                                        ).checked,
-                                      },
-                                    })
-                                  }
-                                />
-                                {t('profiles.dialog.keepClashProxyGroups')}
-                              </label>
-                              <label class="flex items-center gap-2 text-sm text-on-surface">
-                                <input
-                                  class="h-3.5 w-3.5 accent-primary"
-                                  type="checkbox"
-                                  checked={remote.keep.route_rules}
-                                  onChange={(event) =>
-                                    updateRemote(index, {
-                                      keep: {
-                                        ...remote.keep,
-                                        route_rules: (
-                                          event.target as HTMLInputElement
-                                        ).checked,
-                                      },
-                                    })
-                                  }
-                                />
-                                {t('profiles.dialog.keepClashRules')}
-                              </label>
-                            </>
-                          ) : (
-                            <div class="ml-3 space-y-2 border-l border-outline-variant pl-3">
-                              <p class="text-xs font-medium text-on-surface-variant">
-                                {t('profiles.dialog.keepSingboxRoute')}
-                              </p>
-                              <label class="flex items-center gap-2 text-sm text-on-surface">
-                                <input
-                                  class="h-3.5 w-3.5 accent-primary"
-                                  type="checkbox"
-                                  checked={remote.keep.route_final}
-                                  onChange={(event) =>
-                                    updateRemote(index, {
-                                      keep: {
-                                        ...remote.keep,
-                                        route_final: (
-                                          event.target as HTMLInputElement
-                                        ).checked,
-                                      },
-                                    })
-                                  }
-                                />
-                                {t('profiles.dialog.keepSingboxFinal')}
-                              </label>
-                              <label class="flex items-center gap-2 text-sm text-on-surface">
-                                <input
-                                  class="h-3.5 w-3.5 accent-primary"
-                                  type="checkbox"
-                                  checked={remote.keep.route_rules}
-                                  onChange={(event) =>
-                                    updateRemote(index, {
-                                      keep: {
-                                        ...remote.keep,
-                                        route_rules: (
-                                          event.target as HTMLInputElement
-                                        ).checked,
-                                      },
-                                    })
-                                  }
-                                />
-                                {t('profiles.dialog.keepSingboxRules')}
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      </div>
                     </div>
 
                     <div class="border-t border-outline-variant/50">
@@ -943,107 +1193,14 @@ export default __render<ProfileDialogProps>(() => {
       <Dialog
         open={keepRemote != null}
         title={t('profiles.dialog.keepFields')}
-        contentClass="max-w-md"
+        contentClass="max-w-lg"
         onClose={() => {
           keepFieldsRemoteIndex.value = null;
         }}
       >
-        {keepRemote != null && keepFieldsRemoteIndex.value != null ? (
-          <div class="space-y-3">
-            <label class="flex items-center gap-2 text-sm text-on-surface">
-              <input
-                class="h-3.5 w-3.5 accent-primary"
-                type="checkbox"
-                checked={keepRemote.keep.nodes}
-                onChange={(event) =>
-                  updateRemote(keepFieldsRemoteIndex.value!, {
-                    keep: {
-                      ...keepRemote.keep,
-                      nodes: (event.target as HTMLInputElement).checked,
-                    },
-                  })
-                }
-              />
-              {t(
-                keepRemote.format === 'clash'
-                  ? 'profiles.dialog.keepClashProxies'
-                  : 'profiles.dialog.keepSingboxOutbounds',
-              )}
-            </label>
-            {keepRemote.format === 'clash' ? (
-              <>
-                <label class="flex items-center gap-2 text-sm text-on-surface">
-                  <input
-                    class="h-3.5 w-3.5 accent-primary"
-                    type="checkbox"
-                    checked={keepRemote.keep.groups}
-                    onChange={(event) =>
-                      updateRemote(keepFieldsRemoteIndex.value!, {
-                        keep: {
-                          ...keepRemote.keep,
-                          groups: (event.target as HTMLInputElement).checked,
-                        },
-                      })
-                    }
-                  />
-                  {t('profiles.dialog.keepClashProxyGroups')}
-                </label>
-                <label class="flex items-center gap-2 text-sm text-on-surface">
-                  <input
-                    class="h-3.5 w-3.5 accent-primary"
-                    type="checkbox"
-                    checked={keepRemote.keep.route_rules}
-                    onChange={(event) =>
-                      updateRemote(keepFieldsRemoteIndex.value!, {
-                        keep: {
-                          ...keepRemote.keep,
-                          route_rules: (event.target as HTMLInputElement)
-                            .checked,
-                        },
-                      })
-                    }
-                  />
-                  {t('profiles.dialog.keepClashRules')}
-                </label>
-              </>
-            ) : (
-              <>
-                <label class="flex items-center gap-2 text-sm text-on-surface">
-                  <input
-                    class="h-3.5 w-3.5 accent-primary"
-                    type="checkbox"
-                    checked={keepRemote.keep.route_final}
-                    onChange={(event) =>
-                      updateRemote(keepFieldsRemoteIndex.value!, {
-                        keep: {
-                          ...keepRemote.keep,
-                          route_final: (event.target as HTMLInputElement)
-                            .checked,
-                        },
-                      })
-                    }
-                  />
-                  {t('profiles.dialog.keepSingboxFinal')}
-                </label>
-                <label class="flex items-center gap-2 text-sm text-on-surface">
-                  <input
-                    class="h-3.5 w-3.5 accent-primary"
-                    type="checkbox"
-                    checked={keepRemote.keep.route_rules}
-                    onChange={(event) =>
-                      updateRemote(keepFieldsRemoteIndex.value!, {
-                        keep: {
-                          ...keepRemote.keep,
-                          route_rules: (event.target as HTMLInputElement)
-                            .checked,
-                        },
-                      })
-                    }
-                  />
-                  {t('profiles.dialog.keepSingboxRules')}
-                </label>
-              </>
-            )}
+        {keepRemote != null ? (
+          <div class="overflow-hidden rounded border border-outline-variant">
+            {keepFieldNodes.map(renderKeepNode)}
           </div>
         ) : null}
       </Dialog>

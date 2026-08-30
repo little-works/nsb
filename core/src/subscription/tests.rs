@@ -26,40 +26,58 @@ fn snapshot(
         proxy_groups: groups,
         route_rules: rules,
         route_final: final_.map(String::from),
+        dns: None,
+        inbounds: Vec::new(),
+        route: None,
+        experimental: None,
         warnings: Vec::new(),
         updated_at: 0,
     }
 }
 
 #[test]
-fn parses_clash_only_selected_fields() {
-    let keep = RemoteKeepFields {
-        nodes: false,
-        groups: true,
-        route_final: false,
-        route_rules: true,
-    };
+fn parses_clash_outbounds_and_route_rules() {
+    let mut keep = RemoteKeepFields::default();
+    keep.route.rules = true;
     let parsed = parse_remote(&remote(RemoteFormat::Clash, keep), "proxies: [{name: node, type: ss, server: example.com, port: 443}]\nproxy-groups: [{name: group, type: select, proxies: [node]}]\nrules: ['DOMAIN,example.com,group']", false).unwrap();
 
-    assert!(parsed.proxy_nodes.is_empty());
+    assert_eq!(parsed.proxy_nodes[0]["tag"], "node");
     assert_eq!(parsed.proxy_groups[0]["tag"], "group");
     assert_eq!(parsed.route_rules[0]["outbound"], "group");
 }
 
 #[test]
-fn parses_singbox_only_selected_fields() {
-    let keep = RemoteKeepFields {
-        nodes: true,
-        groups: false,
-        route_final: true,
-        route_rules: false,
-    };
+fn parses_singbox_outbounds_as_nodes_and_groups() {
+    let mut keep = RemoteKeepFields::default();
+    keep.route.final_ = true;
     let parsed = parse_remote(&remote(RemoteFormat::Singbox, keep), r#"{"outbounds":[{"type":"shadowsocks","tag":"node"},{"type":"selector","tag":"group","outbounds":["node"]}],"route":{"final":"node","rules":[{"action":"route","outbound":"node"}]}}"#, false).unwrap();
 
     assert_eq!(parsed.proxy_nodes[0]["tag"], "node");
-    assert!(parsed.proxy_groups.is_empty());
+    assert_eq!(parsed.proxy_groups[0]["tag"], "group");
     assert!(parsed.route_rules.is_empty());
     assert_eq!(parsed.route_final.as_deref(), Some("node"));
+}
+
+#[test]
+fn skips_singbox_nodes_and_groups_when_outbounds_are_disabled() {
+    let keep = RemoteKeepFields {
+        outbounds: false,
+        ..RemoteKeepFields::default()
+    };
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Singbox, keep),
+        r#"{
+            "outbounds": [
+                {"type": "shadowsocks", "tag": "node"},
+                {"type": "selector", "tag": "group", "outbounds": ["node"]}
+            ]
+        }"#,
+        false,
+    )
+    .unwrap();
+
+    assert!(parsed.proxy_nodes.is_empty());
+    assert!(parsed.proxy_groups.is_empty());
 }
 
 #[test]
@@ -71,7 +89,135 @@ fn uses_declared_remote_format_instead_of_detecting_document_shape() {
     )
     .unwrap_err();
 
-    assert!(error.contains("missing outbounds"));
+    assert!(error.contains("Failed to parse Remote source as JSONC"));
+}
+
+#[test]
+fn parses_singbox_jsonc_comments_and_trailing_commas() {
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Singbox, RemoteKeepFields::default()),
+        r#"{
+            // A line comment.
+            "outbounds": [
+                {"type": "shadowsocks", "tag": "node"},
+            ],
+            /* A block comment. */
+        }"#,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(parsed.proxy_nodes[0]["tag"], "node");
+}
+
+#[test]
+fn rejects_singbox_syntax_outside_jsonc() {
+    for body in [
+        r#"{"outbounds": [{"type": "direct"} {"type": "block"}]}"#,
+        r#"{'outbounds': []}"#,
+        r#"{outbounds: []}"#,
+        r#"{"outbounds": [], "value": 0x10}"#,
+        r#"{"outbounds": [], "value": +1}"#,
+    ] {
+        let error = parse_remote(
+            &remote(RemoteFormat::Singbox, RemoteKeepFields::default()),
+            body,
+            false,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Failed to parse Remote source as JSONC"));
+    }
+}
+
+#[test]
+fn keeps_selected_singbox_configuration_fragments_and_rewrites_references() {
+    let mut keep = RemoteKeepFields::default();
+    keep.outbounds = false;
+    keep.inbounds = true;
+    keep.dns.servers = true;
+    keep.dns.optimistic.timeout = true;
+    keep.route.rule_set = true;
+    keep.route.default_mark = true;
+    keep.experimental.cache_file.enabled = true;
+    keep.experimental.clash_api.secret = true;
+    keep.experimental.v2ray_api = true;
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Singbox, keep),
+        r#"{
+            "outbounds": [],
+            "dns": {
+                "servers": [{"tag": "remote", "detour": "node"}],
+                "strategy": "prefer_ipv4",
+                "optimistic": {"enabled": true, "timeout": "1s"}
+            },
+            "inbounds": [{"type": "mixed", "tag": "mixed", "detour": "node"}],
+            "route": {
+                "rule_set": [{"tag": "rules", "outbound": "node"}],
+                "default_mark": 255,
+                "find_process": true
+            },
+            "experimental": {
+                "cache_file": {"enabled": true},
+                "clash_api": {
+                    "external_controller": "127.0.0.1:9090",
+                    "secret": "selected"
+                },
+                "v2ray_api": {"listen": "127.0.0.1:8080", "detour": "node"}
+            }
+        }"#,
+        true,
+    )
+    .unwrap();
+
+    assert_eq!(
+        parsed.dns.as_ref().unwrap()["servers"][0]["detour"],
+        "source:node"
+    );
+    assert_eq!(parsed.inbounds[0]["detour"], "source:node");
+    assert_eq!(parsed.route.as_ref().unwrap()["rule_set"][0]["outbound"], "source:node");
+    assert_eq!(parsed.route.as_ref().unwrap()["default_mark"], 255);
+    assert!(parsed.route.as_ref().unwrap().get("find_process").is_none());
+    assert_eq!(parsed.dns.as_ref().unwrap()["optimistic"]["timeout"], "1s");
+    assert!(parsed.dns.as_ref().unwrap().get("strategy").is_none());
+    assert_eq!(
+        parsed.experimental.as_ref().unwrap()["v2ray_api"]["detour"],
+        "source:node"
+    );
+    assert_eq!(
+        parsed.experimental.as_ref().unwrap()["cache_file"]["enabled"],
+        true
+    );
+    assert_eq!(
+        parsed.experimental.as_ref().unwrap()["clash_api"]["secret"],
+        "selected"
+    );
+    assert!(
+        parsed.experimental.as_ref().unwrap()["clash_api"]
+            .get("external_controller")
+            .is_none()
+    );
+}
+
+#[test]
+fn leaves_disabled_singbox_configuration_fragments_empty() {
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Singbox, RemoteKeepFields::default()),
+        r#"{
+            "outbounds": [],
+            "dns": {},
+            "inbounds": [{}],
+            "route": {"rule_set": [{}]},
+            "experimental": {}
+        }"#,
+        false,
+    )
+    .unwrap();
+
+    assert!(parsed.dns.is_none());
+    assert!(parsed.inbounds.is_empty());
+    assert!(parsed.route.is_none());
+    assert!(parsed.experimental.is_none());
 }
 
 #[test]
@@ -143,5 +289,53 @@ fn creates_proxy_selector_when_template_has_none() {
     assert_eq!(
         config["outbounds"][1],
         json!({"type":"selector", "tag":"PROXY", "outbounds":["node"]})
+    );
+}
+
+#[test]
+fn recursively_merges_preserved_fields_in_remote_order_and_appends_arrays() {
+    let template = r#"{
+        "outbounds": [],
+        "dns": {"final": "template", "servers": [{"tag": "template"}]},
+        "inbounds": [{"tag": "template"}],
+        "experimental": {"cache_file": {"enabled": false, "path": "template.db"}}
+    }"#;
+    let mut first = snapshot(Vec::new(), Vec::new(), Vec::new(), None);
+    first.dns = Some(json!({
+        "final": "first",
+        "servers": [{"tag": "first"}]
+    }));
+    first.inbounds = vec![json!({"tag": "first"})];
+    first.route = Some(json!({"rule_set": [{"tag": "first"}]}));
+    first.experimental = Some(json!({"cache_file": {"enabled": true}}));
+    let mut second = snapshot(Vec::new(), Vec::new(), Vec::new(), None);
+    second.dns = Some(json!({
+        "final": "second",
+        "servers": [{"tag": "second"}]
+    }));
+    second.inbounds = vec![json!({"tag": "second"})];
+    second.route = Some(json!({"rule_set": [{"tag": "second"}]}));
+    second.experimental = Some(json!({"cache_file": {"path": "second.db"}}));
+
+    let config: Value =
+        serde_json::from_str(&build_config(template, vec![first, second], None).unwrap()).unwrap();
+
+    assert_eq!(config["dns"]["final"], "second");
+    assert_eq!(
+        config["dns"]["servers"],
+        json!([{"tag": "template"}, {"tag": "first"}, {"tag": "second"}])
+    );
+    assert_eq!(
+        config["inbounds"],
+        json!([{"tag": "template"}, {"tag": "first"}, {"tag": "second"}])
+    );
+    assert_eq!(
+        config["route"]["rule_set"],
+        json!([{"tag": "first"}, {"tag": "second"}])
+    );
+    assert_eq!(config["experimental"]["cache_file"]["enabled"], true);
+    assert_eq!(
+        config["experimental"]["cache_file"]["path"],
+        "second.db"
     );
 }

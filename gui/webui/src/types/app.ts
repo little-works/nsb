@@ -1,4 +1,5 @@
 import type { AppLanguage } from '@/rs-type/AppLanguage';
+import type { ProfileRemoteKeepFields } from '@/rs-type/ProfileRemoteKeepFields';
 
 export type RequestMethod =
   'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PATCH';
@@ -65,12 +66,7 @@ export interface SaveProfilePayload {
     url: string;
     headers: Array<{ key: string; value: string }>;
     format: 'clash' | 'singbox';
-    keep: {
-      nodes: boolean;
-      groups: boolean;
-      route_final: boolean;
-      route_rules: boolean;
-    };
+    keep: ProfileRemoteKeepFields;
   }>;
   hook?: string | null;
 }

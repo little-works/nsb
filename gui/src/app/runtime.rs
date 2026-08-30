@@ -5,8 +5,12 @@ use std::sync::Arc;
 use crate::app::controller::AppController;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
-use crate::state::KernelInfo;
-use nsb_core::{RemoteFormat, RemoteKeepFields, RemoteSource, build_config, parse_remote};
+use crate::state::{KernelInfo, ProfileRemote, ProfileRemoteFormat};
+use nsb_core::{
+    RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields, RemoteExperimentalCacheFileKeepFields,
+    RemoteExperimentalClashApiKeepFields, RemoteExperimentalKeepFields, RemoteFormat,
+    RemoteKeepFields, RemoteRouteKeepFields, RemoteSource, build_config, parse_remote,
+};
 use tokio::sync::{broadcast, Mutex};
 
 pub type SharedGuiRuntime = Arc<Mutex<GuiRuntime>>;
@@ -18,6 +22,107 @@ pub struct GuiRuntime {
     pub profile_host: ProfileHost,
     pub updating_profiles: HashSet<String>,
     kernel_status_tx: broadcast::Sender<KernelInfo>,
+}
+
+fn remote_source(remote: &ProfileRemote) -> RemoteSource {
+    RemoteSource {
+        name: remote.name.clone(),
+        url: remote.url.clone(),
+        format: match remote.format {
+            ProfileRemoteFormat::Clash => RemoteFormat::Clash,
+            ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
+        },
+        keep: RemoteKeepFields {
+            outbounds: remote.keep.outbounds,
+            inbounds: remote.keep.inbounds,
+            dns: RemoteDnsKeepFields {
+                servers: remote.keep.dns.servers,
+                rules: remote.keep.dns.rules,
+                final_: remote.keep.dns.final_,
+                strategy: remote.keep.dns.strategy,
+                disable_cache: remote.keep.dns.disable_cache,
+                disable_expire: remote.keep.dns.disable_expire,
+                independent_cache: remote.keep.dns.independent_cache,
+                cache_capacity: remote.keep.dns.cache_capacity,
+                optimistic: RemoteDnsOptimisticKeepFields {
+                    enabled: remote.keep.dns.optimistic.enabled,
+                    timeout: remote.keep.dns.optimistic.timeout,
+                },
+                timeout: remote.keep.dns.timeout,
+                reverse_mapping: remote.keep.dns.reverse_mapping,
+                client_subnet: remote.keep.dns.client_subnet,
+                fakeip: remote.keep.dns.fakeip,
+            },
+            route: RemoteRouteKeepFields {
+                rules: remote.keep.route.rules,
+                rule_set: remote.keep.route.rule_set,
+                final_: remote.keep.route.final_,
+                auto_detect_interface: remote.keep.route.auto_detect_interface,
+                override_android_vpn: remote.keep.route.override_android_vpn,
+                default_interface: remote.keep.route.default_interface,
+                default_mark: remote.keep.route.default_mark,
+                find_process: remote.keep.route.find_process,
+                find_neighbor: remote.keep.route.find_neighbor,
+                dhcp_lease_files: remote.keep.route.dhcp_lease_files,
+                default_http_client: remote.keep.route.default_http_client,
+                default_domain_resolver: remote.keep.route.default_domain_resolver,
+                default_network_strategy: remote.keep.route.default_network_strategy,
+                default_network_type: remote.keep.route.default_network_type,
+                default_fallback_network_type: remote
+                    .keep
+                    .route
+                    .default_fallback_network_type,
+                default_fallback_delay: remote.keep.route.default_fallback_delay,
+            },
+            experimental: RemoteExperimentalKeepFields {
+                cache_file: RemoteExperimentalCacheFileKeepFields {
+                    enabled: remote.keep.experimental.cache_file.enabled,
+                    path: remote.keep.experimental.cache_file.path,
+                    cache_id: remote.keep.experimental.cache_file.cache_id,
+                    store_fakeip: remote.keep.experimental.cache_file.store_fakeip,
+                    store_rdrc: remote.keep.experimental.cache_file.store_rdrc,
+                    rdrc_timeout: remote.keep.experimental.cache_file.rdrc_timeout,
+                    store_dns: remote.keep.experimental.cache_file.store_dns,
+                },
+                clash_api: RemoteExperimentalClashApiKeepFields {
+                    external_controller: remote
+                        .keep
+                        .experimental
+                        .clash_api
+                        .external_controller,
+                    external_ui: remote.keep.experimental.clash_api.external_ui,
+                    external_ui_download_url: remote
+                        .keep
+                        .experimental
+                        .clash_api
+                        .external_ui_download_url,
+                    external_ui_download_detour: remote
+                        .keep
+                        .experimental
+                        .clash_api
+                        .external_ui_download_detour,
+                    secret: remote.keep.experimental.clash_api.secret,
+                    default_mode: remote.keep.experimental.clash_api.default_mode,
+                    access_control_allow_origin: remote
+                        .keep
+                        .experimental
+                        .clash_api
+                        .access_control_allow_origin,
+                    access_control_allow_private_network: remote
+                        .keep
+                        .experimental
+                        .clash_api
+                        .access_control_allow_private_network,
+                    store_mode: remote.keep.experimental.clash_api.store_mode,
+                    store_selected: remote.keep.experimental.clash_api.store_selected,
+                    store_fakeip: remote.keep.experimental.clash_api.store_fakeip,
+                    cache_file: remote.keep.experimental.clash_api.cache_file,
+                    cache_id: remote.keep.experimental.clash_api.cache_id,
+                },
+                v2ray_api: remote.keep.experimental.v2ray_api,
+            },
+        },
+    }
 }
 
 impl GuiRuntime {
@@ -293,20 +398,7 @@ pub async fn update_profile_runtime(
             {
                 Ok(content) => {
                     let snapshot = parse_remote(
-                        &RemoteSource {
-                            name: remote.name.clone(),
-                            url: remote.url.clone(),
-                            format: match remote.format {
-                                crate::state::ProfileRemoteFormat::Clash => RemoteFormat::Clash,
-                                crate::state::ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
-                            },
-                            keep: RemoteKeepFields {
-                                nodes: remote.keep.nodes,
-                                groups: remote.keep.groups,
-                                route_final: remote.keep.route_final,
-                                route_rules: remote.keep.route_rules,
-                            },
-                        },
+                        &remote_source(remote),
                         &content,
                         multi_remote,
                     )?;
@@ -341,20 +433,7 @@ pub async fn update_profile_runtime(
                         ));
                     };
                     parse_remote(
-                        &RemoteSource {
-                            name: remote.name.clone(),
-                            url: remote.url.clone(),
-                            format: match remote.format {
-                                crate::state::ProfileRemoteFormat::Clash => RemoteFormat::Clash,
-                                crate::state::ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
-                            },
-                            keep: RemoteKeepFields {
-                                nodes: remote.keep.nodes,
-                                groups: remote.keep.groups,
-                                route_final: remote.keep.route_final,
-                                route_rules: remote.keep.route_rules,
-                            },
-                        },
+                        &remote_source(remote),
                         &cached,
                         multi_remote,
                     )

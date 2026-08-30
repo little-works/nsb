@@ -10,6 +10,7 @@ import { Icon } from '@/components/icon';
 import { toast } from '@/components/toast';
 import ProfileDialog from '@/pages/profiles/profile-dialog.setup';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
+import { createDefaultProfileRemoteKeepFields } from '@/pages/profiles/profile-keep-fields';
 import { useProfiles, useRuntimeStatus, useTemplates } from '@/store/app';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { useFloatingDockStore } from '@/store/floating-dock';
@@ -59,12 +60,7 @@ function createEmptyRemote(): ProfileRemote {
     url: '',
     headers: [],
     format: 'clash',
-    keep: {
-      nodes: true,
-      groups: false,
-      route_final: false,
-      route_rules: false,
-    },
+    keep: createDefaultProfileRemoteKeepFields(),
   };
 }
 

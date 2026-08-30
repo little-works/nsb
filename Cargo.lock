@@ -1416,6 +1416,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonc-parser"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0560e3f9a9a03ea6b6e90b41138c5db9e21526c99eb192c1a26c68176593285"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1675,6 +1684,7 @@ name = "nsb-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "jsonc-parser",
  "rquickjs",
  "serde",
  "serde_json",

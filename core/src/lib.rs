@@ -3,8 +3,10 @@ pub mod subscription;
 
 pub use entity::*;
 pub use subscription::{
-    RemoteFormat, RemoteKeepFields, RemoteSnapshot, RemoteSource, build_config, default_template,
-    parse_remote, run_finalize_hook,
+    RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields, RemoteExperimentalCacheFileKeepFields,
+    RemoteExperimentalClashApiKeepFields, RemoteExperimentalKeepFields, RemoteFormat,
+    RemoteKeepFields, RemoteRouteKeepFields, RemoteSnapshot, RemoteSource, build_config,
+    default_template, parse_remote, run_finalize_hook,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

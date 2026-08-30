@@ -43,6 +43,7 @@ pub fn build_config(
         source_nodes.append(&mut remote.proxy_nodes);
         source_groups.append(&mut remote.proxy_groups);
         route_rules.append(&mut remote.route_rules);
+        merge_preserved_fields(&mut config, remote);
         if let Some(final_outbound) = remote.route_final.take() {
             config["route"]["final"] = Value::String(final_outbound);
         }
@@ -81,6 +82,46 @@ pub fn build_config(
     }
     serde_json::to_string_pretty(&config)
         .map_err(|error| format!("Failed to serialize generated configuration: {error}"))
+}
+
+fn merge_preserved_fields(config: &mut Value, remote: &mut RemoteSnapshot) {
+    let mut fragment = serde_json::Map::new();
+    if let Some(dns) = remote.dns.take() {
+        fragment.insert(String::from("dns"), dns);
+    }
+    if !remote.inbounds.is_empty() {
+        fragment.insert(
+            String::from("inbounds"),
+            Value::Array(std::mem::take(&mut remote.inbounds)),
+        );
+    }
+    if let Some(route) = remote.route.take() {
+        fragment.insert(String::from("route"), route);
+    }
+    if let Some(experimental) = remote.experimental.take() {
+        fragment.insert(String::from("experimental"), experimental);
+    }
+    merge_value(config, Value::Object(fragment));
+}
+
+fn merge_value(target: &mut Value, incoming: Value) {
+    match (target, incoming) {
+        (Value::Object(target), Value::Object(incoming)) => {
+            for (key, value) in incoming {
+                match target.get_mut(&key) {
+                    Some(target) => merge_value(target, value),
+                    None => {
+                        target.insert(key, value);
+                    }
+                }
+            }
+        }
+        (Value::Array(target), Value::Array(mut incoming)) => {
+            // TODO: Define field-specific deduplication rules before removing duplicates here.
+            target.append(&mut incoming);
+        }
+        (target, incoming) => *target = incoming,
+    }
 }
 
 fn append_proxy_members(proxy: &mut Value, members: &[String]) -> Result<(), String> {

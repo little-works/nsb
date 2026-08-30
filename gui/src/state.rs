@@ -66,25 +66,169 @@ pub enum ProfileRemoteFormat {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ProfileRemoteKeepFields {
-    #[serde(default = "keep_nodes")]
-    pub nodes: bool,
+    #[serde(default = "keep_outbounds")]
+    pub outbounds: bool,
     #[serde(default)]
-    pub groups: bool,
+    pub inbounds: bool,
     #[serde(default)]
-    pub route_final: bool,
+    pub dns: ProfileRemoteDnsKeepFields,
     #[serde(default)]
-    pub route_rules: bool,
+    pub route: ProfileRemoteRouteKeepFields,
+    #[serde(default)]
+    pub experimental: ProfileRemoteExperimentalKeepFields,
 }
-fn keep_nodes() -> bool {
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteDnsKeepFields {
+    #[serde(default)]
+    pub servers: bool,
+    #[serde(default)]
+    pub rules: bool,
+    #[serde(default, rename = "final")]
+    #[ts(rename = "final")]
+    pub final_: bool,
+    #[serde(default)]
+    pub strategy: bool,
+    #[serde(default)]
+    pub disable_cache: bool,
+    #[serde(default)]
+    pub disable_expire: bool,
+    #[serde(default)]
+    pub independent_cache: bool,
+    #[serde(default)]
+    pub cache_capacity: bool,
+    #[serde(default)]
+    pub optimistic: ProfileRemoteDnsOptimisticKeepFields,
+    #[serde(default)]
+    pub timeout: bool,
+    #[serde(default)]
+    pub reverse_mapping: bool,
+    #[serde(default)]
+    pub client_subnet: bool,
+    #[serde(default)]
+    pub fakeip: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteDnsOptimisticKeepFields {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub timeout: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteRouteKeepFields {
+    #[serde(default)]
+    pub rules: bool,
+    #[serde(default)]
+    pub rule_set: bool,
+    #[serde(default, rename = "final")]
+    #[ts(rename = "final")]
+    pub final_: bool,
+    #[serde(default)]
+    pub auto_detect_interface: bool,
+    #[serde(default)]
+    pub override_android_vpn: bool,
+    #[serde(default)]
+    pub default_interface: bool,
+    #[serde(default)]
+    pub default_mark: bool,
+    #[serde(default)]
+    pub find_process: bool,
+    #[serde(default)]
+    pub find_neighbor: bool,
+    #[serde(default)]
+    pub dhcp_lease_files: bool,
+    #[serde(default)]
+    pub default_http_client: bool,
+    #[serde(default)]
+    pub default_domain_resolver: bool,
+    #[serde(default)]
+    pub default_network_strategy: bool,
+    #[serde(default)]
+    pub default_network_type: bool,
+    #[serde(default)]
+    pub default_fallback_network_type: bool,
+    #[serde(default)]
+    pub default_fallback_delay: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteExperimentalKeepFields {
+    #[serde(default)]
+    pub cache_file: ProfileRemoteExperimentalCacheFileKeepFields,
+    #[serde(default)]
+    pub clash_api: ProfileRemoteExperimentalClashApiKeepFields,
+    #[serde(default)]
+    pub v2ray_api: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteExperimentalCacheFileKeepFields {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub path: bool,
+    #[serde(default)]
+    pub cache_id: bool,
+    #[serde(default)]
+    pub store_fakeip: bool,
+    #[serde(default)]
+    pub store_rdrc: bool,
+    #[serde(default)]
+    pub rdrc_timeout: bool,
+    #[serde(default)]
+    pub store_dns: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteExperimentalClashApiKeepFields {
+    #[serde(default)]
+    pub external_controller: bool,
+    #[serde(default)]
+    pub external_ui: bool,
+    #[serde(default)]
+    pub external_ui_download_url: bool,
+    #[serde(default)]
+    pub external_ui_download_detour: bool,
+    #[serde(default)]
+    pub secret: bool,
+    #[serde(default)]
+    pub default_mode: bool,
+    #[serde(default)]
+    pub access_control_allow_origin: bool,
+    #[serde(default)]
+    pub access_control_allow_private_network: bool,
+    #[serde(default)]
+    pub store_mode: bool,
+    #[serde(default)]
+    pub store_selected: bool,
+    #[serde(default)]
+    pub store_fakeip: bool,
+    #[serde(default)]
+    pub cache_file: bool,
+    #[serde(default)]
+    pub cache_id: bool,
+}
+
+fn keep_outbounds() -> bool {
     true
 }
 impl Default for ProfileRemoteKeepFields {
     fn default() -> Self {
         Self {
-            nodes: true,
-            groups: false,
-            route_final: false,
-            route_rules: false,
+            outbounds: true,
+            inbounds: false,
+            dns: ProfileRemoteDnsKeepFields::default(),
+            route: ProfileRemoteRouteKeepFields::default(),
+            experimental: ProfileRemoteExperimentalKeepFields::default(),
         }
     }
 }
