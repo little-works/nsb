@@ -2,6 +2,7 @@ import type {
   CoreApiConnectionsData,
   CoreApiLogsData,
   CoreApiTrafficData,
+  CoreApiWsMessage,
   RuntimeStatus,
 } from '@/types';
 import { toast } from '@/components/toast';
@@ -47,6 +48,57 @@ function isRuntimeStatus(value: unknown): value is RuntimeStatus {
   );
 }
 
+function isTrafficData(value: unknown): value is CoreApiTrafficData {
+  return (
+    isRecord(value) &&
+    typeof value.down === 'number' &&
+    typeof value.up === 'number'
+  );
+}
+
+function isConnectionsData(value: unknown): value is CoreApiConnectionsData {
+  return (
+    isRecord(value) &&
+    typeof value.memory === 'number' &&
+    typeof value.uploadTotal === 'number' &&
+    typeof value.downloadTotal === 'number' &&
+    Array.isArray(value.connections)
+  );
+}
+
+function isLogsData(value: unknown): value is CoreApiLogsData | string {
+  return (
+    typeof value === 'string' ||
+    (isRecord(value) &&
+      typeof value.type === 'string' &&
+      typeof value.payload === 'string')
+  );
+}
+
+type ScoreMessage =
+  | CoreApiWsMessage<'traffic'>
+  | CoreApiWsMessage<'connections'>
+  | CoreApiWsMessage<'logs'>
+  | CoreApiWsMessage<'runtime'>;
+
+function isScoreMessage(value: unknown): value is ScoreMessage {
+  if (!isRecord(value) || typeof value.type !== 'string') {
+    return false;
+  }
+  switch (value.type) {
+    case 'traffic':
+      return isTrafficData(value.data);
+    case 'connections':
+      return isConnectionsData(value.data);
+    case 'logs':
+      return isLogsData(value.data);
+    case 'runtime':
+      return isRuntimeStatus(value.data);
+    default:
+      return false;
+  }
+}
+
 function scheduleReconnect() {
   if (
     reconnectTimer ||
@@ -87,18 +139,24 @@ function connect() {
     }
     try {
       const message: unknown = JSON.parse(event.data);
-      if (!isRecord(message) || typeof message.type !== 'string') {
+      if (!isScoreMessage(message)) {
         return;
       }
-      if (message.type === 'traffic' && isRecord(message.data)) {
-        traffic.value = message.data as unknown as CoreApiTrafficData;
-      } else if (message.type === 'connections' && isRecord(message.data)) {
-        connections.value = message.data as unknown as CoreApiConnectionsData;
-      } else if (message.type === 'logs') {
-        const log = message.data as CoreApiLogsData | string;
-        logListeners.forEach((listener) => listener(log));
-      } else if (message.type === 'runtime' && isRuntimeStatus(message.data)) {
-        runtimeListeners.forEach((listener) => listener(message.data));
+      switch (message.type) {
+        case 'traffic':
+          traffic.value = message.data;
+          break;
+        case 'connections':
+          connections.value = message.data;
+          break;
+        case 'logs': {
+          logListeners.forEach((listener) => listener(message.data));
+          break;
+        }
+        case 'runtime': {
+          runtimeListeners.forEach((listener) => listener(message.data));
+          break;
+        }
       }
     } catch (error) {
       console.error('Failed to parse score stream message:', error);

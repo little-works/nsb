@@ -79,7 +79,7 @@ export interface CoreApiConnectionsData {
 }
 
 export type CoreApiWsDataMap = {
-  logs: CoreApiLogsData;
+  logs: CoreApiLogsData | string;
   memory: CoreApiMemoryData;
   traffic: CoreApiTrafficData;
   connections: CoreApiConnectionsData;
