@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::Local;
 use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde_json::{Map, Value, json};
@@ -323,11 +325,11 @@ fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<Remot
         rename(&mut item, "cipher", "method");
         normalize_proxy(&mut item, kind);
         item.insert("type".into(), Value::String(kind.into()));
-        if remote.keep.outbounds {
+        if remote.keep.clash.proxies {
             nodes.push(normalize_tag(Value::Object(item), remote, multi)?);
         }
     }
-    if remote.keep.outbounds {
+    if remote.keep.clash.proxy_groups {
         for group in value
             .get("proxy-groups")
             .and_then(Value::as_array)
@@ -339,18 +341,33 @@ fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<Remot
             }
         }
     }
-    let rules = if remote.keep.route.rules {
+    let rules = if remote.keep.clash.rules {
+        let retained_targets: HashSet<String> = nodes
+            .iter()
+            .chain(&groups)
+            .filter_map(|outbound| outbound.get("tag").and_then(Value::as_str))
+            .map(str::to_owned)
+            .collect();
         value
             .get("rules")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
             .filter_map(|rule| convert_rule(remote, rule, multi, &mut warnings))
+            .filter(|rule| clash_rule_target_is_retained(rule, &retained_targets))
             .collect()
     } else {
         Vec::new()
     };
     Ok(snapshot(remote, nodes, groups, rules, warnings))
+}
+
+fn clash_rule_target_is_retained(rule: &Value, retained_targets: &HashSet<String>) -> bool {
+    rule.get("outbound")
+        .and_then(Value::as_str)
+        .is_some_and(|target| {
+            matches!(target, "direct" | "block") || retained_targets.contains(target)
+        })
 }
 
 fn snapshot(

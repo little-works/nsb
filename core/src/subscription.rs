@@ -10,7 +10,8 @@ pub use builder::{build_config, default_template};
 pub use hooks::run_finalize_hook;
 pub use parsing::parse_remote;
 pub use types::{
-    RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields, RemoteExperimentalCacheFileKeepFields,
-    RemoteExperimentalClashApiKeepFields, RemoteExperimentalKeepFields, RemoteFormat,
-    RemoteKeepFields, RemoteRouteKeepFields, RemoteSnapshot, RemoteSource,
+    RemoteClashKeepFields, RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields,
+    RemoteExperimentalCacheFileKeepFields, RemoteExperimentalClashApiKeepFields,
+    RemoteExperimentalKeepFields, RemoteFormat, RemoteKeepFields, RemoteRouteKeepFields,
+    RemoteSnapshot, RemoteSource,
 };

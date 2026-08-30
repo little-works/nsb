@@ -3,8 +3,10 @@
 import type { ProfileRemoteDnsKeepFields } from './ProfileRemoteDnsKeepFields';
 import type { ProfileRemoteExperimentalKeepFields } from './ProfileRemoteExperimentalKeepFields';
 import type { ProfileRemoteRouteKeepFields } from './ProfileRemoteRouteKeepFields';
+import type { ProfileRemoteClashKeepFields } from './ProfileRemoteClashKeepFields';
 
 export type ProfileRemoteKeepFields = {
+  clash: ProfileRemoteClashKeepFields;
   outbounds: boolean;
   inbounds: boolean;
   dns: ProfileRemoteDnsKeepFields;

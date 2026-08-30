@@ -7,9 +7,10 @@ use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::{KernelInfo, ProfileRemote, ProfileRemoteFormat};
 use nsb_core::{
-    RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields, RemoteExperimentalCacheFileKeepFields,
-    RemoteExperimentalClashApiKeepFields, RemoteExperimentalKeepFields, RemoteFormat,
-    RemoteKeepFields, RemoteRouteKeepFields, RemoteSource, build_config, parse_remote,
+    RemoteClashKeepFields, RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields,
+    RemoteExperimentalCacheFileKeepFields, RemoteExperimentalClashApiKeepFields,
+    RemoteExperimentalKeepFields, RemoteFormat, RemoteKeepFields, RemoteRouteKeepFields,
+    RemoteSource, build_config, parse_remote,
 };
 use tokio::sync::{broadcast, Mutex};
 
@@ -33,6 +34,11 @@ fn remote_source(remote: &ProfileRemote) -> RemoteSource {
             ProfileRemoteFormat::Singbox => RemoteFormat::Singbox,
         },
         keep: RemoteKeepFields {
+            clash: RemoteClashKeepFields {
+                proxies: remote.keep.clash.proxies,
+                proxy_groups: remote.keep.clash.proxy_groups,
+                rules: remote.keep.clash.rules,
+            },
             outbounds: remote.keep.outbounds,
             inbounds: remote.keep.inbounds,
             dns: RemoteDnsKeepFields {

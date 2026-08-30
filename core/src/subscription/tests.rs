@@ -36,14 +36,67 @@ fn snapshot(
 }
 
 #[test]
-fn parses_clash_outbounds_and_route_rules() {
+fn parses_clash_proxies_proxy_groups_and_rules() {
     let mut keep = RemoteKeepFields::default();
-    keep.route.rules = true;
+    keep.clash.rules = true;
     let parsed = parse_remote(&remote(RemoteFormat::Clash, keep), "proxies: [{name: node, type: ss, server: example.com, port: 443}]\nproxy-groups: [{name: group, type: select, proxies: [node]}]\nrules: ['DOMAIN,example.com,group']", false).unwrap();
 
     assert_eq!(parsed.proxy_nodes[0]["tag"], "node");
     assert_eq!(parsed.proxy_groups[0]["tag"], "group");
     assert_eq!(parsed.route_rules[0]["outbound"], "group");
+}
+
+#[test]
+fn controls_each_clash_configuration_block_independently() {
+    let body = "proxies: [{name: node, type: ss, server: example.com, port: 443}]\nproxy-groups: [{name: group, type: select, proxies: [node]}]\nrules: ['DOMAIN,example.com,group']";
+    let mut keep = RemoteKeepFields::default();
+    keep.clash.proxies = false;
+    keep.clash.rules = true;
+    let without_proxies =
+        parse_remote(&remote(RemoteFormat::Clash, keep), body, false).unwrap();
+
+    assert!(without_proxies.proxy_nodes.is_empty());
+    assert_eq!(without_proxies.proxy_groups[0]["tag"], "group");
+    assert_eq!(without_proxies.route_rules[0]["outbound"], "group");
+
+    let mut keep = RemoteKeepFields::default();
+    keep.clash.proxy_groups = false;
+    let without_groups_or_rules =
+        parse_remote(&remote(RemoteFormat::Clash, keep), body, false).unwrap();
+
+    assert_eq!(without_groups_or_rules.proxy_nodes[0]["tag"], "node");
+    assert!(without_groups_or_rules.proxy_groups.is_empty());
+    assert!(without_groups_or_rules.route_rules.is_empty());
+}
+
+#[test]
+fn filters_clash_rules_whose_outbound_block_is_not_retained() {
+    let body = "proxies: [{name: node, type: ss, server: example.com, port: 443}]\nproxy-groups: [{name: group, type: select, proxies: [node]}]\nrules: ['DOMAIN,node.example,node', 'DOMAIN,group.example,group', 'DOMAIN,direct.example,DIRECT', 'DOMAIN,reject.example,REJECT']";
+    let mut keep = RemoteKeepFields::default();
+    keep.clash.proxies = false;
+    keep.clash.rules = true;
+    let without_proxies =
+        parse_remote(&remote(RemoteFormat::Clash, keep), body, true).unwrap();
+    let targets: Vec<_> = without_proxies
+        .route_rules
+        .iter()
+        .filter_map(|rule| rule["outbound"].as_str())
+        .collect();
+
+    assert_eq!(targets, vec!["source:group", "direct", "block"]);
+
+    let mut keep = RemoteKeepFields::default();
+    keep.clash.proxy_groups = false;
+    keep.clash.rules = true;
+    let without_groups =
+        parse_remote(&remote(RemoteFormat::Clash, keep), body, true).unwrap();
+    let targets: Vec<_> = without_groups
+        .route_rules
+        .iter()
+        .filter_map(|rule| rule["outbound"].as_str())
+        .collect();
+
+    assert_eq!(targets, vec!["source:node", "direct", "block"]);
 }
 
 #[test]

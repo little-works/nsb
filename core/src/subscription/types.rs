@@ -11,6 +11,8 @@ pub enum RemoteFormat {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RemoteKeepFields {
+    #[serde(default)]
+    pub clash: RemoteClashKeepFields,
     #[serde(default = "keep_true")]
     pub outbounds: bool,
     #[serde(default)]
@@ -21,6 +23,26 @@ pub struct RemoteKeepFields {
     pub route: RemoteRouteKeepFields,
     #[serde(default)]
     pub experimental: RemoteExperimentalKeepFields,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RemoteClashKeepFields {
+    #[serde(default = "keep_true")]
+    pub proxies: bool,
+    #[serde(default = "keep_true")]
+    pub proxy_groups: bool,
+    #[serde(default)]
+    pub rules: bool,
+}
+
+impl Default for RemoteClashKeepFields {
+    fn default() -> Self {
+        Self {
+            proxies: true,
+            proxy_groups: true,
+            rules: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -162,6 +184,7 @@ fn keep_true() -> bool {
 impl Default for RemoteKeepFields {
     fn default() -> Self {
         Self {
+            clash: RemoteClashKeepFields::default(),
             outbounds: true,
             inbounds: false,
             dns: RemoteDnsKeepFields::default(),

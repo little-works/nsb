@@ -236,22 +236,30 @@ export default __render<ProfileDialogProps>(() => {
     ? []
     : keepRemote.format === 'clash'
       ? [
-          leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
-            keep.outbounds = checked;
-          }),
-          {
-            id: 'clash-route',
-            label: t('profiles.dialog.keepParentClashRoute'),
-            children: [
-              leaf(
-                'route.rules',
-                keepRemote.keep.route.rules,
-                (keep, checked) => {
-                  keep.route.rules = checked;
-                },
-              ),
-            ],
-          },
+          leaf(
+            'clash.proxies',
+            keepRemote.keep.clash.proxies,
+            (keep, checked) => {
+              keep.clash.proxies = checked;
+            },
+            'clash_proxies',
+          ),
+          leaf(
+            'clash.proxy_groups',
+            keepRemote.keep.clash.proxy_groups,
+            (keep, checked) => {
+              keep.clash.proxy_groups = checked;
+            },
+            'clash_proxy_groups',
+          ),
+          leaf(
+            'clash.rules',
+            keepRemote.keep.clash.rules,
+            (keep, checked) => {
+              keep.clash.rules = checked;
+            },
+            'clash_rules',
+          ),
         ]
       : [
           leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {

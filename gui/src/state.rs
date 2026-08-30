@@ -66,7 +66,9 @@ pub enum ProfileRemoteFormat {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ProfileRemoteKeepFields {
-    #[serde(default = "keep_outbounds")]
+    #[serde(default)]
+    pub clash: ProfileRemoteClashKeepFields,
+    #[serde(default = "keep_true")]
     pub outbounds: bool,
     #[serde(default)]
     pub inbounds: bool,
@@ -76,6 +78,27 @@ pub struct ProfileRemoteKeepFields {
     pub route: ProfileRemoteRouteKeepFields,
     #[serde(default)]
     pub experimental: ProfileRemoteExperimentalKeepFields,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProfileRemoteClashKeepFields {
+    #[serde(default = "keep_true")]
+    pub proxies: bool,
+    #[serde(default = "keep_true")]
+    pub proxy_groups: bool,
+    #[serde(default)]
+    pub rules: bool,
+}
+
+impl Default for ProfileRemoteClashKeepFields {
+    fn default() -> Self {
+        Self {
+            proxies: true,
+            proxy_groups: true,
+            rules: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -218,12 +241,13 @@ pub struct ProfileRemoteExperimentalClashApiKeepFields {
     pub cache_id: bool,
 }
 
-fn keep_outbounds() -> bool {
+fn keep_true() -> bool {
     true
 }
 impl Default for ProfileRemoteKeepFields {
     fn default() -> Self {
         Self {
+            clash: ProfileRemoteClashKeepFields::default(),
             outbounds: true,
             inbounds: false,
             dns: ProfileRemoteDnsKeepFields::default(),
