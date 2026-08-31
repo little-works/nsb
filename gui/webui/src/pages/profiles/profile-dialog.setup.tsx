@@ -94,6 +94,7 @@ const templateEditorOpen = ref(false);
 const inlineTemplateDraft = ref<JsonObject | null>(null);
 const templateViewerOpen = ref(false);
 const keepFieldsRemoteIndex = ref<number | null>(null);
+const keepFieldsDraft = ref<ProfileRemote['keep'] | null>(null);
 const mounted = useMounted();
 
 function renderHookHelpButton(ariaLabel: string) {
@@ -120,16 +121,37 @@ function updateRemote(index: number, next: Partial<ProfileRemote>) {
   );
 }
 
-function updateKeepFields(
-  index: number,
-  leaves: KeepFieldLeaf[],
-  checked: boolean,
-) {
+function updateKeepFields(leaves: KeepFieldLeaf[], checked: boolean) {
+  const keep = keepFieldsDraft.value;
+  if (!keep) return;
+  for (const leaf of leaves) leaf.setChecked(keep, checked);
+}
+
+function cloneKeepFields(keep: ProfileRemote['keep']): ProfileRemote['keep'] {
+  return JSON.parse(JSON.stringify(keep));
+}
+
+function openKeepFields(index: number) {
   const remote = props.remotes[index];
   if (!remote) return;
-  const keep = structuredClone(toRaw(remote.keep));
-  for (const leaf of leaves) leaf.setChecked(keep, checked);
-  updateRemote(index, { keep });
+  keepFieldsDraft.value = cloneKeepFields(toRaw(remote.keep));
+  keepFieldsRemoteIndex.value = index;
+}
+
+function closeKeepFields() {
+  keepFieldsRemoteIndex.value = null;
+  keepFieldsDraft.value = null;
+}
+
+function saveKeepFields() {
+  const index = keepFieldsRemoteIndex.value;
+  const keep = keepFieldsDraft.value;
+  if (index == null || !keep) {
+    closeKeepFields();
+    return;
+  }
+  updateRemote(index, { keep: cloneKeepFields(toRaw(keep)) });
+  closeKeepFields();
 }
 
 function descendantLeaves(node: KeepFieldNode): KeepFieldLeaf[] {
@@ -217,10 +239,16 @@ function saveInlineTemplate() {
 const { t } = useI18n();
 
 export default __render<ProfileDialogProps>(() => {
-  const keepRemote =
+  const keepRemoteSource =
     keepFieldsRemoteIndex.value == null
       ? null
       : props.remotes[keepFieldsRemoteIndex.value];
+  const keepRemote = keepRemoteSource
+    ? {
+        ...keepRemoteSource,
+        keep: keepFieldsDraft.value ?? keepRemoteSource.keep,
+      }
+    : null;
   const leaf = (
     id: string,
     checked: boolean,
@@ -519,11 +547,7 @@ export default __render<ProfileDialogProps>(() => {
               indeterminate={indeterminate}
               onChange={(nextChecked) => {
                 if (remoteIndex == null) return;
-                updateKeepFields(
-                  remoteIndex,
-                  leaves,
-                  indeterminate ? true : nextChecked,
-                );
+                updateKeepFields(leaves, indeterminate ? true : nextChecked);
               }}
             />
             <span class="min-w-0 truncate font-mono text-sm font-semibold">
@@ -550,7 +574,7 @@ export default __render<ProfileDialogProps>(() => {
           checked={node.checked}
           onChange={(checked) => {
             if (remoteIndex == null) return;
-            updateKeepFields(remoteIndex, [node], checked);
+            updateKeepFields([node], checked);
           }}
         />
         <span class="min-w-0 truncate text-sm font-medium">{node.label}</span>
@@ -841,7 +865,7 @@ export default __render<ProfileDialogProps>(() => {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              keepFieldsRemoteIndex.value = index;
+                              openKeepFields(index);
                             }}
                           >
                             {t('profiles.dialog.keepFields')}
@@ -1203,12 +1227,27 @@ export default __render<ProfileDialogProps>(() => {
         title={t('profiles.dialog.keepFields')}
         contentClass="max-w-lg"
         onClose={() => {
-          keepFieldsRemoteIndex.value = null;
+          closeKeepFields();
         }}
       >
         {keepRemote != null ? (
-          <div class="overflow-hidden rounded border border-outline-variant">
-            {keepFieldNodes.map(renderKeepNode)}
+          <div class="flex max-h-[80vh] min-h-0 flex-col overflow-hidden rounded border border-outline-variant">
+            <div class="min-h-0 flex-1 overflow-y-auto">
+              {keepFieldNodes.map(renderKeepNode)}
+            </div>
+            <div class="flex h-14 shrink-0 items-center justify-end gap-2 border-t border-outline-variant bg-surface-container-lowest px-3">
+              <Button
+                shape="rect"
+                size="sm"
+                variant="ghost"
+                onClick={closeKeepFields}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button shape="rect" size="sm" onClick={saveKeepFields}>
+                {t('common.save')}
+              </Button>
+            </div>
           </div>
         ) : null}
       </Dialog>
