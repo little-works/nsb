@@ -1,0 +1,23 @@
+.floating-dock__items {
+  max-height: calc(19rem - 1rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 1499px) {
+  .floating-dock {
+    transition: transform 150ms ease;
+  }
+
+  .floating-dock::after {
+    position: absolute;
+    top: 0;
+    right: -1.5rem;
+    bottom: 0;
+    width: 1.5rem;
+    content: '';
+  }
+
+  .floating-dock:not(:hover):not(:has(:focus-visible)) {
+    transform: translateX(calc(33.333% + 1.5rem));
+  }
+}
