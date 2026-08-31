@@ -203,7 +203,7 @@ const enUS = {
       createPresetTemplate: 'Create NSB Preset',
       remoteFormat: 'Subscription Format',
       remoteFormatClash: 'Clash',
-      remoteFormatSingbox: 'sing-box',
+      remoteFormatSingbox: 'Sing-Box',
       keepFields: 'Keep Fields',
       keepField: {
         clash_proxies: 'proxies',
@@ -569,7 +569,7 @@ const zhCN = {
       createPresetTemplate: '创建 NSB 预设',
       remoteFormat: '订阅格式',
       remoteFormatClash: 'Clash',
-      remoteFormatSingbox: 'sing-box',
+      remoteFormatSingbox: 'Sing-Box',
       keepFields: '保留字段',
       keepField: {
         clash_proxies: 'proxies（代理节点）',
