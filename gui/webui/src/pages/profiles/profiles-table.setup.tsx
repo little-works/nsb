@@ -18,6 +18,7 @@ export interface ProfilesTableProps {
   loading: boolean;
   onEdit: (item: ProfileSummary) => void;
   onDelete: (item: ProfileSummary) => void;
+  onViewConfig: (item: ProfileSummary) => void | Promise<void>;
   onSetCurrent: (item: ProfileSummary) => void | Promise<void>;
   onRefresh: (item: ProfileSummary) => void | Promise<void>;
 }
@@ -119,6 +120,19 @@ export default __render<ProfilesTableProps>(() => {
                         ),
                         overlay: ({ close }: DropdownSlotProps) => (
                           <>
+                            <Button
+                              block
+                              class="px-2"
+                              shape="rect"
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                close();
+                                props.onViewConfig(item);
+                              }}
+                            >
+                              {t('profiles.viewConfig')}
+                            </Button>
                             <Button
                               block
                               class="px-2"

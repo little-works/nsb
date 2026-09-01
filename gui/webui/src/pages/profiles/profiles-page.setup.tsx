@@ -1,10 +1,14 @@
 import {
   deleteProfile,
+  getProfileContent,
   importProfile,
   refreshProfileById,
   setCurrentProfile,
 } from '@/api/client';
 import { IconButton } from '@/components/button';
+import { CodeEditor } from '@/components/code-editor';
+import { Dialog } from '@/components/dialog';
+import { useClientQuery } from '@/hooks/use-client-query';
 import { Page, PageContent } from '@/components/page-content';
 import { toast } from '@/components/toast';
 import ProfilesTable from '@/pages/profiles/profiles-table.setup';
@@ -12,7 +16,7 @@ import { __render } from '@/shared/helpter';
 import { useProfiles, useRuntimeStatus } from '@/store/app';
 import { AddOutlined, FileUploadOutlined } from '@vicons/material';
 import { fileOpen } from 'browser-fs-access';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { navigate } from 'vike/client/router';
 import { i18n } from '@/i18n';
@@ -32,6 +36,33 @@ const currentProfileId = computed(
 const currentProfile = computed(
   () =>
     profiles.value.find((item) => item.id === currentProfileId.value) ?? null,
+);
+const viewingProfile = ref<{ id: string; name: string } | null>(null);
+const profileContentQuery = useClientQuery(
+  computed(() => ({
+    queryKey: ['profile-content', viewingProfile.value?.id],
+    enabled: false,
+    queryFn: async () => {
+      const profile = viewingProfile.value;
+      if (!profile) {
+        throw new Error(i18n.global.t('profiles.noneSelected'));
+      }
+
+      try {
+        return await getProfileContent(profile.id);
+      } catch (error) {
+        viewingProfile.value = null;
+        toast.error({
+          content:
+            error instanceof Error
+              ? error.message
+              : i18n.global.t('profiles.configLoadFailed'),
+          title: i18n.global.t('profiles.operationFailed'),
+        });
+        throw error;
+      }
+    },
+  })),
 );
 
 function openCreatePage() {
@@ -123,6 +154,15 @@ async function handleRefresh(id: string, name: string) {
   }
 }
 
+function handleViewConfig(id: string, name: string) {
+  viewingProfile.value = { id, name };
+  void profileContentQuery.refetch();
+}
+
+function closeConfigViewer() {
+  viewingProfile.value = null;
+}
+
 defineOptions({ name: 'ProfilesPage' });
 const { t } = useI18n();
 
@@ -164,7 +204,29 @@ export default __render<ProfilesPageProps>(() => (
             onDelete={(item) => void handleDelete(item.id, item.name)}
             onRefresh={(item) => void handleRefresh(item.id, item.name)}
             onSetCurrent={(item) => void handleSetCurrent(item.id)}
+            onViewConfig={(item) => handleViewConfig(item.id, item.name)}
           />
+          <Dialog
+            open={Boolean(viewingProfile.value)}
+            title={t('profiles.configTitle', {
+              name: viewingProfile.value?.name ?? '',
+            })}
+            contentClass="max-w-5xl"
+            onClose={closeConfigViewer}
+          >
+            <div class="h-128">
+              {profileContentQuery.isFetching.value ? (
+                <div class="flex h-full items-center justify-center text-sm text-on-surface-variant">
+                  {t('common.loading')}
+                </div>
+              ) : (
+                <CodeEditor
+                  readOnly
+                  value={profileContentQuery.data.value ?? ''}
+                />
+              )}
+            </div>
+          </Dialog>
         </PageContent>
       ),
     }}

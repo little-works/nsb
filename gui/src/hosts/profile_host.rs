@@ -134,13 +134,6 @@ impl ProfileHost {
         }
     }
 
-    pub async fn runtime_exists(&self, id: &str) -> Result<bool, String> {
-        let path = self.runtime_path(id);
-        fs::try_exists(&path)
-            .await
-            .map_err(|err| format!("Failed to check Profile cache: {}: {err}", path.display()))
-    }
-
     pub async fn migrate_runtime(&self, id: &str) -> Result<(), String> {
         let path = self.runtime_path(id);
         if fs::try_exists(&path)

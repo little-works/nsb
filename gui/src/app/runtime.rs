@@ -25,7 +25,7 @@ pub struct GuiRuntime {
     kernel_status_tx: broadcast::Sender<KernelInfo>,
 }
 
-fn remote_source(remote: &ProfileRemote) -> RemoteSource {
+pub(crate) fn remote_source(remote: &ProfileRemote) -> RemoteSource {
     RemoteSource {
         name: remote.name.clone(),
         url: remote.url.clone(),
@@ -173,7 +173,6 @@ impl GuiRuntime {
             .toggle_kernel(
                 &mut self.singbox_host,
                 &self.profile_host,
-                &self.app_config_store,
             )
             .await;
         self.publish_kernel_status();
@@ -186,7 +185,6 @@ impl GuiRuntime {
             .restart_kernel(
                 &mut self.singbox_host,
                 &self.profile_host,
-                &self.app_config_store,
             )
             .await;
         self.publish_kernel_status();
@@ -205,7 +203,6 @@ impl GuiRuntime {
                     .start_kernel(
                         &mut self.singbox_host,
                         &self.profile_host,
-                        &self.app_config_store,
                     )
                     .await?;
             }
@@ -322,7 +319,6 @@ impl GuiRuntime {
             .auto_start_kernel_if_needed(
                 &mut self.singbox_host,
                 &self.profile_host,
-                &self.app_config_store,
             )
             .await;
         self.publish_kernel_status();

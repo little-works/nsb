@@ -1,6 +1,9 @@
 use log::{info, warn};
 use std::str::FromStr;
 
+use nsb_core::{build_config, parse_remote};
+
+use crate::app::runtime::remote_source;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::system_proxy_host::SystemProxyHost;
 use crate::hosts::{ProfileHost, SingBoxHost};
@@ -64,7 +67,6 @@ impl AppController {
         &mut self,
         singbox_host: &mut SingBoxHost,
         profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         self.sync_kernel_runtime(singbox_host).await;
         if self.state.kernel.status == crate::state::KernelStatus::Running {
@@ -76,7 +78,7 @@ impl AppController {
                 String::from("No Profile is active. Add and select a Profile first.")
             })?;
             let path = self
-                .ensure_profile_runtime(&current, profile_host, app_config_store)
+                .ensure_profile_runtime(&current, profile_host)
                 .await?;
             let source = path.display().to_string();
             singbox_host
@@ -124,15 +126,13 @@ impl AppController {
         &mut self,
         singbox_host: &mut SingBoxHost,
         profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
     ) -> Result<bool, String> {
         self.sync_kernel_runtime(singbox_host).await;
         if self.state.kernel.status == crate::state::KernelStatus::Running {
             self.stop_kernel(singbox_host).await?;
             Ok(false)
         } else {
-            self.start_kernel(singbox_host, profile_host, app_config_store)
-                .await?;
+            self.start_kernel(singbox_host, profile_host).await?;
             Ok(true)
         }
     }
@@ -141,14 +141,12 @@ impl AppController {
         &mut self,
         singbox_host: &mut SingBoxHost,
         profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         self.sync_kernel_runtime(singbox_host).await;
         if self.state.kernel.status == crate::state::KernelStatus::Running {
             self.stop_kernel(singbox_host).await?;
         }
-        self.start_kernel(singbox_host, profile_host, app_config_store)
-            .await
+        self.start_kernel(singbox_host, profile_host).await
     }
 
     pub async fn create_profile(
@@ -403,24 +401,23 @@ impl AppController {
         self.sync_kernel_runtime(singbox_host).await;
         let was_kernel_running = self.state.kernel.status == crate::state::KernelStatus::Running;
         let id = id.trim().to_string();
-        let profile = self
+        if !self
             .state
             .gui_config
             .profiles
             .iter()
-            .find(|profile| profile.id == id)
-            .cloned()
-            .ok_or_else(|| String::from("Profile to activate was not found."))?;
+            .any(|profile| profile.id == id)
+        {
+            return Err(String::from("Profile to activate was not found."));
+        }
 
-        self.ensure_profile_runtime(&profile, profile_host, app_config_store)
-            .await?;
         self.set_current_profile(id, app_config_store).await?;
 
         if was_kernel_running {
             self.stop_kernel(singbox_host).await?;
         }
-        self.start_kernel(singbox_host, profile_host, app_config_store)
-            .await
+        self.start_kernel(singbox_host, profile_host).await?;
+        Ok(())
     }
 
     pub async fn save_runtime_settings(
@@ -492,15 +489,13 @@ impl AppController {
         &mut self,
         singbox_host: &mut SingBoxHost,
         profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
     ) -> Result<bool, String> {
         self.sync_kernel_runtime(singbox_host).await;
         if self.state.kernel.status == crate::state::KernelStatus::Running {
             return Ok(false);
         }
 
-        self.start_kernel(singbox_host, profile_host, app_config_store)
-            .await?;
+        self.start_kernel(singbox_host, profile_host).await?;
         Ok(true)
     }
 
@@ -539,21 +534,61 @@ impl AppController {
     }
 
     async fn ensure_profile_runtime(
-        &mut self,
+        &self,
         profile: &ProfileItem,
         profile_host: &ProfileHost,
-        app_config_store: &AppConfigStore,
     ) -> Result<std::path::PathBuf, String> {
-        let path = profile_host.runtime_path(&profile.id);
+        let template = if let Some(content) = profile.inline_template.clone() {
+            content
+        } else {
+            self.state
+                .gui_config
+                .templates
+                .iter()
+                .find(|item| item.id == profile.template_id)
+                .map(|item| item.content.clone())
+                .ok_or_else(|| String::from("Profile references a missing Template."))?
+        };
+        let multi_remote = profile.remotes.len() > 1;
+        let mut snapshots = Vec::new();
 
-        if profile_host.runtime_exists(&profile.id).await? {
-            return Ok(path);
+        for remote in &profile.remotes {
+            let cached = profile_host
+                .read_remote_raw(&profile.id, &remote.name)
+                .await?
+                .ok_or_else(|| {
+                    format!(
+                        "Remote {} has no cached content. Refresh the Profile before starting the kernel.",
+                        remote.name
+                    )
+                })?;
+            let snapshot = parse_remote(&remote_source(remote), &cached, multi_remote).map_err(
+                |error| {
+                    format!(
+                        "Failed to parse cached Remote {} before starting the kernel: {error}",
+                        remote.name
+                    )
+                },
+            )?;
+            for warning in &snapshot.warnings {
+                warn!("{warning}");
+            }
+            snapshots.push(snapshot);
         }
 
-        let _ = app_config_store;
-        Err(String::from(
-            "Profile runtime is missing. Refresh the Profile before activation.",
-        ))
+        let content = build_config(&template, snapshots, profile.hook.as_deref()).map_err(
+            |error| {
+                log::error!(
+                    "Failed to generate Profile runtime configuration before kernel start: profile_id={} remotes={} error={error}",
+                    profile.id,
+                    profile.remotes.len(),
+                );
+                error
+            },
+        )?;
+        profile_host.save_runtime(&profile.id, &content).await?;
+
+        Ok(profile_host.runtime_path(&profile.id))
     }
 
     fn normalize_current_profile(&mut self) {

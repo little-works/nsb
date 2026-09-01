@@ -15,17 +15,20 @@ export type CodeEditorLanguage = 'javascript' | 'json';
 export interface CodeEditorProps {
   value: string;
   language?: CodeEditorLanguage;
+  readOnly?: boolean;
   onChange?: (value: string) => void;
 }
 
 const props = withDefaults(defineProps<CodeEditorProps>(), {
   language: 'json',
+  readOnly: false,
   onChange: () => {},
 });
 
 const container = ref<HTMLElement | null>(null);
 const languageCompartment = new Compartment();
 const themeCompartment = new Compartment();
+const readOnlyCompartment = new Compartment();
 let editor: EditorView | undefined;
 let themeObserver: MutationObserver | undefined;
 let synchronizing = false;
@@ -94,6 +97,19 @@ function updateLanguage() {
   });
 }
 
+function readOnlyExtensions() {
+  return [
+    EditorState.readOnly.of(props.readOnly),
+    EditorView.editable.of(!props.readOnly),
+  ];
+}
+
+function updateReadOnly() {
+  editor?.dispatch({
+    effects: readOnlyCompartment.reconfigure(readOnlyExtensions()),
+  });
+}
+
 function updateEditor(value: string) {
   if (!editor || value === editor.state.doc.toString()) {
     return;
@@ -108,6 +124,7 @@ function updateEditor(value: string) {
 
 watch(() => props.value, updateEditor);
 watch(() => props.language, updateLanguage);
+watch(() => props.readOnly, updateReadOnly);
 
 onMounted(() => {
   if (!container.value) {
@@ -124,6 +141,7 @@ onMounted(() => {
         EditorView.lineWrapping,
         languageCompartment.of(languageExtensions()),
         themeCompartment.of(themeExtensions()),
+        readOnlyCompartment.of(readOnlyExtensions()),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !synchronizing) {
             props.onChange?.(update.state.doc.toString());
