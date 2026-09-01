@@ -19,16 +19,23 @@ export interface ProfileNodeEditorProps {
   open: boolean;
   title: string;
   description?: string;
-  saveLabel: string;
+  readOnly?: boolean;
+  saveLabel?: string;
   content: string;
   loading: boolean;
-  saving: boolean;
+  saving?: boolean;
   onClose: () => void;
-  onContentChange: (content: string) => void;
-  onSave: () => void;
+  onContentChange?: (content: string) => void;
+  onSave?: () => void;
 }
 
-const props = defineProps<ProfileNodeEditorProps>();
+const props = withDefaults(defineProps<ProfileNodeEditorProps>(), {
+  readOnly: false,
+  saveLabel: '',
+  saving: false,
+  onContentChange: () => {},
+  onSave: () => {},
+});
 const slots = useSlots();
 const rootValue = shallowRef<JsonValue | undefined>(undefined);
 const selectedPath = ref<JsonPathSegment[]>([]);
@@ -96,6 +103,8 @@ function selectPath(path: JsonPathSegment[]) {
 }
 
 function updateEditorValue(value: string) {
+  if (props.readOnly) return;
+
   editorValue.value = value;
 
   try {
@@ -109,14 +118,16 @@ function updateEditorValue(value: string) {
     rootValue.value = nextRoot;
     parseError.value = '';
     emittedContent = serialized;
-    props.onContentChange(serialized);
+    props.onContentChange?.(serialized);
   } catch (error) {
     parseError.value = jsonErrorMessage(error);
   }
 }
 
 function canSave() {
-  return !props.loading && !props.saving && !hasParseError.value;
+  return (
+    !props.readOnly && !props.loading && !props.saving && !hasParseError.value
+  );
 }
 
 function getValueAtPath(value: JsonValue, path: JsonPathSegment[]) {
@@ -274,8 +285,9 @@ export default __render<ProfileNodeEditorProps>(() => {
                   </div>
                 ) : (
                   <CodeEditor
+                    readOnly={props.readOnly}
                     value={editorValue.value}
-                    onChange={updateEditorValue}
+                    onChange={props.readOnly ? undefined : updateEditorValue}
                   />
                 )}
               </div>
@@ -288,26 +300,28 @@ export default __render<ProfileNodeEditorProps>(() => {
             </p>
           ) : null}
 
-          <div class="mt-3 flex justify-end gap-2">
-            <Button
-              disabled={props.saving}
-              shape="rect"
-              size="sm"
-              variant="outline"
-              onClick={props.onClose}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              disabled={!canSave()}
-              shape="rect"
-              size="sm"
-              variant="solid"
-              onClick={props.onSave}
-            >
-              {props.saveLabel}
-            </Button>
-          </div>
+          {!props.readOnly ? (
+            <div class="mt-3 flex justify-end gap-2">
+              <Button
+                disabled={props.saving}
+                shape="rect"
+                size="sm"
+                variant="outline"
+                onClick={props.onClose}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                disabled={!canSave()}
+                shape="rect"
+                size="sm"
+                variant="solid"
+                onClick={props.onSave}
+              >
+                {props.saveLabel}
+              </Button>
+            </div>
+          ) : null}
         </>
       ) : null}
     </Dialog>

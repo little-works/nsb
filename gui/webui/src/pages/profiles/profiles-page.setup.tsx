@@ -6,10 +6,9 @@ import {
   setCurrentProfile,
 } from '@/api/client';
 import { IconButton } from '@/components/button';
-import { CodeEditor } from '@/components/code-editor';
-import { Dialog } from '@/components/dialog';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { Page, PageContent } from '@/components/page-content';
+import ProfileNodeEditor from '@/pages/profiles/profile-node-editor.setup';
 import { toast } from '@/components/toast';
 import ProfilesTable from '@/pages/profiles/profiles-table.setup';
 import { __render } from '@/shared/helpter';
@@ -206,28 +205,19 @@ export default __render<ProfilesPageProps>(() => (
             onSetCurrent={(item) => void handleSetCurrent(item.id)}
             onViewConfig={(item) => handleViewConfig(item.id, item.name)}
           />
-          <Dialog
-            open={Boolean(viewingProfile.value)}
-            title={t('profiles.configTitle', {
-              name: viewingProfile.value?.name ?? '',
-            })}
-            contentClass="max-w-5xl"
-            onClose={closeConfigViewer}
-          >
-            <div class="h-128">
-              {profileContentQuery.isFetching.value ? (
-                <div class="flex h-full items-center justify-center text-sm text-on-surface-variant">
-                  {t('common.loading')}
-                </div>
-              ) : (
-                <CodeEditor
-                  readOnly
-                  value={profileContentQuery.data.value ?? ''}
-                />
-              )}
-            </div>
-          </Dialog>
         </PageContent>
+      ),
+      overlay: () => (
+        <ProfileNodeEditor
+          content={profileContentQuery.data.value ?? ''}
+          loading={profileContentQuery.isFetching.value}
+          open={Boolean(viewingProfile.value)}
+          readOnly
+          title={t('profiles.configTitle', {
+            name: viewingProfile.value?.name ?? '',
+          })}
+          onClose={closeConfigViewer}
+        />
       ),
     }}
   </Page>
