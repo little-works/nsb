@@ -30,16 +30,9 @@ pub fn build_config(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let mut seen: HashSet<String> = outbounds
-        .iter()
-        .filter_map(tag)
-        .map(str::to_owned)
-        .collect();
     let mut source_groups = Vec::new();
     let mut source_nodes = Vec::new();
     for remote in &mut remotes {
-        dedupe(&mut remote.proxy_nodes, &mut seen);
-        dedupe(&mut remote.proxy_groups, &mut seen);
         source_nodes.append(&mut remote.proxy_nodes);
         source_groups.append(&mut remote.proxy_groups);
         route_rules.append(&mut remote.route_rules);
@@ -55,6 +48,7 @@ pub fn build_config(
         .collect();
     let node_tags: Vec<String> = source_nodes
         .iter()
+        .filter(|outbound| !is_builtin_outbound(outbound))
         .filter_map(tag)
         .map(str::to_owned)
         .collect();
@@ -66,6 +60,7 @@ pub fn build_config(
         Some(proxy) => append_proxy_members(proxy, &members)?,
         None => outbounds.push(json!({"type":"selector","tag":"PROXY","outbounds":members})),
     }
+    dedupe_outbounds(&mut outbounds);
     config["outbounds"] = Value::Array(outbounds);
     if !route_rules.is_empty() {
         config["route"]["rules"] = Value::Array(route_rules);
@@ -137,8 +132,35 @@ fn append_proxy_members(proxy: &mut Value, members: &[String]) -> Result<(), Str
     }
     Ok(())
 }
-fn dedupe(items: &mut Vec<Value>, seen: &mut HashSet<String>) {
-    items.retain(|item| tag(item).is_some_and(|tag| seen.insert(tag.into())));
+fn dedupe_outbounds(outbounds: &mut Vec<Value>) {
+    let mut seen_tags = HashSet::new();
+    let mut untagged = Vec::new();
+    let mut retained = Vec::with_capacity(outbounds.len());
+    for outbound in std::mem::take(outbounds).into_iter().rev() {
+        let keep = match tag(&outbound) {
+            Some(tag) => seen_tags.insert(tag),
+            None => {
+                if untagged.contains(&outbound) {
+                    false
+                } else {
+                    untagged.push(outbound.clone());
+                    true
+                }
+            }
+        };
+        if keep {
+            retained.push(outbound);
+        }
+    }
+    retained.reverse();
+    *outbounds = retained;
+}
+
+fn is_builtin_outbound(outbound: &Value) -> bool {
+    matches!(
+        outbound.get("type").and_then(Value::as_str),
+        Some("direct" | "block")
+    )
 }
 fn tag(value: &Value) -> Option<&str> {
     value.get("tag").and_then(Value::as_str)

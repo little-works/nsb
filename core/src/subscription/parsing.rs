@@ -62,9 +62,6 @@ fn parse_singbox(
             .get("type")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if matches!(kind, "direct" | "block") {
-            continue;
-        }
         if !remote.keep.outbounds {
             continue;
         }

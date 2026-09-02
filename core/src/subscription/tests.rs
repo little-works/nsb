@@ -112,6 +112,39 @@ fn parses_singbox_outbounds_as_nodes_and_groups() {
 }
 
 #[test]
+fn preserves_singbox_direct_and_block_outbounds() {
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Singbox, RemoteKeepFields::default()),
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "qunhe-out",
+                    "type": "direct",
+                    "domain_resolver": "dns-device-local"
+                },
+                {"tag": "qunhe-block", "type": "block"}
+            ]
+        }"#,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(parsed.proxy_nodes.len(), 2);
+    assert_eq!(
+        parsed.proxy_nodes[0],
+        json!({
+            "tag": "qunhe-out",
+            "type": "direct",
+            "domain_resolver": "dns-device-local"
+        })
+    );
+    assert_eq!(
+        parsed.proxy_nodes[1],
+        json!({"tag": "qunhe-block", "type": "block"})
+    );
+}
+
+#[test]
 fn skips_singbox_nodes_and_groups_when_outbounds_are_disabled() {
     let keep = RemoteKeepFields {
         outbounds: false,
@@ -342,6 +375,54 @@ fn creates_proxy_selector_when_template_has_none() {
     assert_eq!(
         config["outbounds"][1],
         json!({"type":"selector", "tag":"PROXY", "outbounds":["node"]})
+    );
+}
+
+#[test]
+fn deduplicates_outbounds_by_tag_or_untagged_value_and_excludes_direct_block_from_proxy() {
+    let template = r#"{
+        "outbounds": [
+            {"type": "direct", "tag": "direct"},
+            {"type": "direct", "tag": "qunhe-out", "domain_resolver": "template"}
+        ]
+    }"#;
+    let config: Value = serde_json::from_str(
+        &build_config(
+            template,
+            vec![snapshot(
+                vec![
+                    json!({"type": "direct", "tag": "direct"}),
+                    json!({"type": "direct", "tag": "qunhe-out", "domain_resolver": "remote"}),
+                    json!({"type": "block", "tag": "qunhe-block"}),
+                    json!({"type": "shadowsocks", "tag": "node"}),
+                    json!({"type": "direct", "domain_resolver": "dns-device-local"}),
+                    serde_json::from_str::<Value>(
+                        r#"{"domain_resolver":"dns-device-local","type":"direct"}"#,
+                    )
+                    .unwrap(),
+                    json!({"type": "direct", "domain_resolver": "other-dns"}),
+                ],
+                Vec::new(),
+                Vec::new(),
+                None,
+            )],
+            None,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        config["outbounds"],
+        json!([
+            {"type": "direct", "tag": "direct"},
+            {"type": "direct", "tag": "qunhe-out", "domain_resolver": "remote"},
+            {"type": "block", "tag": "qunhe-block"},
+            {"type": "shadowsocks", "tag": "node"},
+            {"type": "direct", "domain_resolver": "dns-device-local"},
+            {"type": "direct", "domain_resolver": "other-dns"},
+            {"type": "selector", "tag": "PROXY", "outbounds": ["node"]}
+        ])
     );
 }
 
