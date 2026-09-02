@@ -138,7 +138,7 @@ fn dedupe_outbounds(outbounds: &mut Vec<Value>) {
     let mut retained = Vec::with_capacity(outbounds.len());
     for outbound in std::mem::take(outbounds).into_iter().rev() {
         let keep = match tag(&outbound) {
-            Some(tag) => seen_tags.insert(tag),
+            Some(tag) => seen_tags.insert(tag.to_owned()),
             None => {
                 if untagged.contains(&outbound) {
                     false
