@@ -21,6 +21,12 @@ export interface KernelReleaseInfo {
   version: string;
 }
 
+export interface KernelDownloadProgress {
+  downloaded: number;
+  total: number | null;
+  in_progress: boolean;
+}
+
 export function fetchRuntime() {
   return request.get<RuntimeStatus>('/api/runtime');
 }
@@ -43,6 +49,10 @@ export function fetchLatestKernelRelease() {
 
 export function downloadLatestKernel() {
   return kernelDownloadRequest.post<KernelReleaseInfo>('/api/kernel/download');
+}
+
+export function fetchKernelDownloadProgress() {
+  return request.get<KernelDownloadProgress>('/api/kernel/download/progress');
 }
 
 export async function importKernelBinary(file: File) {

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct V2RayTransport {
     #[serde(rename = "type")]
-    pub type_: String,
+    pub type_: Option<String>,
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,
 }
@@ -14,14 +14,14 @@ pub struct V2RayTransport {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Utls {
-    pub enabled: bool,
-    pub fingerprint: String,
+    pub enabled: Option<bool>,
+    pub fingerprint: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct OutboundTls {
-    pub enabled: bool,
+    pub enabled: Option<bool>,
     pub disable_sni: Option<bool>,
     pub server_name: Option<String>,
     pub insecure: Option<bool>,
@@ -31,9 +31,9 @@ pub struct OutboundTls {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Outbound {
-    pub tag: String,
+    pub tag: Option<String>,
     #[serde(rename = "type")]
-    pub type_: String,
+    pub type_: Option<String>,
     pub server: Option<String>,
     pub server_port: Option<usize>,
     pub alter_id: Option<usize>,
@@ -57,10 +57,10 @@ pub struct Outbound {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Inbound {
     #[serde(rename = "type")]
-    pub type_: String,
-    pub tag: String,
-    pub listen: String,
-    pub listen_port: usize,
+    pub type_: Option<String>,
+    pub tag: Option<String>,
+    pub listen: Option<String>,
+    pub listen_port: Option<usize>,
     pub tcp_fast_open: Option<bool>,
     pub tcp_multi_path: Option<bool>,
     pub udp_fragment: Option<bool>,
@@ -88,12 +88,15 @@ pub struct RouteRule {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct RuleSet {
-    pub tag: String,
+    pub tag: Option<String>,
     #[serde(rename = "type")]
-    pub type_: String,
-    pub url: String,
-    pub format: String,
-    pub download_detour: Option<String>,
+    pub type_: Option<String>,
+    pub rules: Option<Vec<Value>>,
+    pub path: Option<String>,
+    pub url: Option<String>,
+    pub format: Option<String>,
+    pub initial_path: Option<String>,
+    pub http_client: Option<Value>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -101,17 +104,17 @@ pub struct RuleSet {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct DefaultDomainResolver {
-    pub server: String,
+    pub server: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Route {
     #[serde(rename = "final")]
-    pub final_: String,
-    pub rules: Vec<RouteRule>,
-    pub rule_set: Vec<RuleSet>,
-    pub auto_detect_interface: bool,
+    pub final_: Option<String>,
+    pub rules: Option<Vec<RouteRule>>,
+    pub rule_set: Option<Vec<RuleSet>>,
+    pub auto_detect_interface: Option<bool>,
     pub default_domain_resolver: Option<DefaultDomainResolver>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -120,7 +123,7 @@ pub struct Route {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct DnsServer {
-    pub tag: String,
+    pub tag: Option<String>,
     #[serde(rename = "type")]
     pub type_: Option<String>,
     pub address: Option<String>,
@@ -139,7 +142,7 @@ pub struct DnsServer {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct DnsRule {
     pub action: Option<String>,
-    pub server: String,
+    pub server: Option<String>,
     pub domain_suffix: Option<Vec<String>>,
     pub rule_set: Option<Vec<String>>,
     pub clash_mode: Option<String>,
@@ -150,7 +153,7 @@ pub struct DnsRule {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct DnsFakeIp {
-    pub enabled: bool,
+    pub enabled: Option<bool>,
     pub inet4_range: Option<String>,
     pub inet6_range: Option<String>,
 }
@@ -160,8 +163,8 @@ pub struct DnsFakeIp {
 pub struct Dns {
     #[serde(rename = "final")]
     pub final_: Option<String>,
-    pub servers: Vec<DnsServer>,
-    pub rules: Vec<DnsRule>,
+    pub servers: Option<Vec<DnsServer>>,
+    pub rules: Option<Vec<DnsRule>>,
     pub independent_cache: Option<bool>,
     pub disable_cache: Option<bool>,
     pub disable_expire: Option<bool>,
@@ -186,7 +189,7 @@ pub struct ClashApi {
 #[serde_with::skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct CacheFile {
-    pub enabled: bool,
+    pub enabled: Option<bool>,
     pub path: Option<String>,
     pub cache_id: Option<String>,
     pub store_fakeip: Option<bool>,
@@ -213,14 +216,50 @@ pub struct Log {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SingBoxConfig {
     pub log: Option<Log>,
-    #[serde(default)]
-    pub outbounds: Vec<Outbound>,
-    #[serde(default)]
-    pub route: Route,
+    pub outbounds: Option<Vec<Outbound>>,
+    pub route: Option<Route>,
     pub dns: Option<Dns>,
-    #[serde(default)]
-    pub inbounds: Vec<Inbound>,
+    pub inbounds: Option<Vec<Inbound>>,
     pub experimental: Option<Experimental>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SingBoxConfig;
+
+    #[test]
+    fn parses_partial_template_with_inline_rule_set() {
+        let config: SingBoxConfig = serde_json::from_str(
+            r#"{
+                "route": {
+                    "rule_set": [{
+                        "type": "inline",
+                        "tag": "private",
+                        "rules": [{"domain_suffix": ["example.test"]}]
+                    }]
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let rule_set = config
+            .route
+            .as_ref()
+            .and_then(|route| route.rule_set.as_ref())
+            .and_then(|rule_sets| rule_sets.first())
+            .unwrap();
+        assert_eq!(rule_set.type_.as_deref(), Some("inline"));
+        assert_eq!(rule_set.rules.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn parses_an_empty_configuration_fragment() {
+        let config: SingBoxConfig = serde_json::from_str("{}").unwrap();
+
+        assert!(config.inbounds.is_none());
+        assert!(config.outbounds.is_none());
+        assert!(config.route.is_none());
+    }
 }

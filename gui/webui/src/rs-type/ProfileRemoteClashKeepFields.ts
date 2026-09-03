@@ -2,6 +2,4 @@
 
 export type ProfileRemoteClashKeepFields = {
   proxies: boolean;
-  proxy_groups: boolean;
-  rules: boolean;
 };

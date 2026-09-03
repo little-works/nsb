@@ -1,5 +1,9 @@
 import { __render } from '@/shared/helpter';
-import { downloadLatestKernel, importKernelBinary } from '@/api/client';
+import {
+  downloadLatestKernel,
+  fetchKernelDownloadProgress,
+  importKernelBinary,
+} from '@/api/client';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { toast } from '@/components/toast';
@@ -8,8 +12,9 @@ import {
   InfoOutlined,
   UploadFileOutlined,
 } from '@vicons/material';
-import { ref } from 'vue';
+import { useClientQuery } from '@/hooks/use-client-query';
 import { useI18n } from 'vue-i18n';
+import { computed, ref } from 'vue';
 import { i18n } from '@/i18n';
 
 export interface KernelInfoSectionProps {
@@ -21,7 +26,27 @@ export interface KernelInfoSectionProps {
 const props = defineProps<KernelInfoSectionProps>();
 const fileInput = ref<HTMLInputElement>();
 const importing = ref(false);
-const downloading = ref(false);
+const downloadQuery = useClientQuery({
+  queryKey: ['downloadLatestKernel'],
+  queryFn: downloadLatestKernel,
+  enabled: false,
+});
+const downloadProgressQuery = useClientQuery({
+  queryKey: ['kernelDownloadProgress'],
+  queryFn: fetchKernelDownloadProgress,
+  enabled: false,
+});
+const downloading = computed(() => downloadQuery.isFetching.value);
+const downloadPercent = computed(() => {
+  const progress = downloadProgressQuery.data.value;
+  if (!progress?.total || progress.total <= 0) {
+    return null;
+  }
+  return Math.min(
+    100,
+    Math.floor((progress.downloaded / progress.total) * 100),
+  );
+});
 
 function openImportPicker() {
   fileInput.value?.click();
@@ -62,9 +87,19 @@ async function downloadKernel() {
     return;
   }
 
-  downloading.value = true;
+  const progressTimer = window.setInterval(() => {
+    void downloadProgressQuery.refetch();
+  }, 500);
+  void downloadProgressQuery.refetch();
   try {
-    const release = await downloadLatestKernel();
+    const result = await downloadQuery.refetch();
+    if (result.error) {
+      throw result.error;
+    }
+    if (!result.data) {
+      throw new Error(i18n.global.t('errors.kernelDownload'));
+    }
+    const release = result.data;
     await props.onReload?.();
     toast.info({
       title: i18n.global.t('errors.kernelInstalled', {
@@ -80,7 +115,8 @@ async function downloadKernel() {
       title: i18n.global.t('errors.kernelAction'),
     });
   } finally {
-    downloading.value = false;
+    window.clearInterval(progressTimer);
+    void downloadProgressQuery.refetch();
   }
 }
 
@@ -150,7 +186,9 @@ function KernelInfoContent() {
             <Icon class="text-base">
               <DownloadOutlined />
             </Icon>
-            {t('settings.download')}
+            {downloading.value && downloadPercent.value != null
+              ? `${downloadPercent.value}%`
+              : t('settings.download')}
           </Button>
         </div>
       </div>

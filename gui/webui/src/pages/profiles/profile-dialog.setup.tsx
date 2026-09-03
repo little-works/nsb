@@ -272,22 +272,6 @@ export default __render<ProfileDialogProps>(() => {
             },
             'clash_proxies',
           ),
-          leaf(
-            'clash.proxy_groups',
-            keepRemote.keep.clash.proxy_groups,
-            (keep, checked) => {
-              keep.clash.proxy_groups = checked;
-            },
-            'clash_proxy_groups',
-          ),
-          leaf(
-            'clash.rules',
-            keepRemote.keep.clash.rules,
-            (keep, checked) => {
-              keep.clash.rules = checked;
-            },
-            'clash_rules',
-          ),
         ]
       : [
           leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {

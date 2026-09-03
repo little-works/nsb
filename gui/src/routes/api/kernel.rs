@@ -9,9 +9,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use axum::Json;
 use axum::extract::{Multipart, State};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 
 use crate::hosts::SingBoxHost;
-use crate::routes::RouteState;
+use crate::routes::{KernelDownloadProgress, RouteState};
 use crate::state::KernelInfo;
 use crate::utils::command::std_command;
 
@@ -43,6 +44,28 @@ pub struct RuntimeStatusResponse {
     pub kernel: KernelInfo,
 }
 
+#[derive(Clone, Default, Serialize)]
+pub struct KernelDownloadProgressResponse {
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    pub in_progress: bool,
+}
+
+pub async fn get_kernel_download_progress(
+    State(ctx): State<RouteState>,
+) -> Json<ApiResponse<KernelDownloadProgressResponse>> {
+    let progress = ctx
+        .kernel_download_progress
+        .lock()
+        .map(|progress| KernelDownloadProgressResponse {
+            downloaded: progress.downloaded,
+            total: progress.total,
+            in_progress: progress.in_progress,
+        })
+        .unwrap_or_default();
+    Json(ApiResponse::success(String::new(), Some(progress)))
+}
+
 pub async fn get_runtime(
     State(ctx): State<RouteState>,
 ) -> Json<ApiResponse<RuntimeStatusResponse>> {
@@ -64,11 +87,15 @@ static LATEST_KERNEL_RELEASE_CACHE: OnceLock<Mutex<Option<CachedKernelRelease>>>
 
 struct KernelDownloadGuard {
     in_progress: Arc<AtomicBool>,
+    progress: Arc<Mutex<KernelDownloadProgress>>,
 }
 
 impl Drop for KernelDownloadGuard {
     fn drop(&mut self) {
         self.in_progress.store(false, Ordering::Release);
+        if let Ok(mut progress) = self.progress.lock() {
+            progress.in_progress = false;
+        }
     }
 }
 
@@ -206,7 +233,14 @@ pub async fn download_latest_kernel(
     }
     let _download_guard = KernelDownloadGuard {
         in_progress: ctx.kernel_download_in_progress.clone(),
+        progress: ctx.kernel_download_progress.clone(),
     };
+    if let Ok(mut progress) = ctx.kernel_download_progress.lock() {
+        *progress = KernelDownloadProgress {
+            in_progress: true,
+            ..Default::default()
+        };
+    }
 
     crate::route_log!(ctx, "info", "starting latest sing-box kernel download.");
     let release = match fetch_latest_release().await {
@@ -237,6 +271,7 @@ pub async fn download_latest_kernel(
             None,
         ));
     };
+    update_download_progress(&ctx.kernel_download_progress, 0, Some(asset.size));
     crate::route_log!(
         ctx,
         "info",
@@ -265,18 +300,24 @@ pub async fn download_latest_kernel(
             asset.size
         );
     }
-    let archive_path =
-        match download_release_asset(&asset.browser_download_url, archive_path, asset.size).await {
-            Ok(archive_path) => archive_path,
-            Err(err) => {
-                crate::route_log!(
-                    ctx,
-                    "warn",
-                    "failed to download sing-box release asset: {err}"
-                );
-                return Json(ApiResponse::failure(err, None));
-            }
-        };
+    let archive_path = match download_release_asset(
+        &asset.browser_download_url,
+        archive_path,
+        asset.size,
+        ctx.kernel_download_progress.clone(),
+    )
+    .await
+    {
+        Ok(archive_path) => archive_path,
+        Err(err) => {
+            crate::route_log!(
+                ctx,
+                "warn",
+                "failed to download sing-box release asset: {err}"
+            );
+            return Json(ApiResponse::failure(err, None));
+        }
+    };
     crate::route_log!(
         ctx,
         "info",
@@ -338,34 +379,66 @@ async fn download_release_asset(
     url: &str,
     archive_path: PathBuf,
     expected_size: u64,
+    progress: Arc<Mutex<KernelDownloadProgress>>,
 ) -> Result<PathBuf, String> {
     if cached_archive_matches(&archive_path, expected_size) {
+        update_download_progress(&progress, expected_size, Some(expected_size));
         return Ok(archive_path);
     }
 
-    let bytes = github_get(url)
+    let mut response = github_get(url)
         .send()
         .await
         .map_err(|err| format!("Failed to download sing-box: {err}"))?
         .error_for_status()
-        .map_err(|err| format!("GitHub download returned an error status: {err}"))?
-        .bytes()
-        .await
-        .map_err(|err| format!("Failed to read sing-box download content: {err}"))?;
-    if bytes.len() as u64 != expected_size {
-        return Err(format!(
-            "Downloaded sing-box file size does not match: expected={expected_size} actual={}",
-            bytes.len()
-        ));
-    }
+        .map_err(|err| format!("GitHub download returned an error status: {err}"))?;
     let parent = archive_path
         .parent()
         .ok_or_else(|| String::from("Unable to determine sing-box download directory."))?;
     fs::create_dir_all(parent)
         .map_err(|err| format!("Failed to create sing-box download directory: {err}"))?;
-    fs::write(&archive_path, bytes)
+    let partial_path = archive_path.with_extension("part");
+    let mut file = tokio::fs::File::create(&partial_path)
+        .await
+        .map_err(|err| format!("Failed to create sing-box download file: {err}"))?;
+    let mut downloaded = 0_u64;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|err| format!("Failed to read sing-box download content: {err}"))?
+    {
+        file.write_all(&chunk)
+            .await
+            .map_err(|err| format!("Failed to save sing-box download file: {err}"))?;
+        downloaded += u64::try_from(chunk.len()).unwrap_or_default();
+        update_download_progress(&progress, downloaded, Some(expected_size));
+    }
+    file.flush()
+        .await
         .map_err(|err| format!("Failed to save sing-box download file: {err}"))?;
+    if downloaded != expected_size {
+        return Err(format!(
+            "Downloaded sing-box file size does not match: expected={expected_size} actual={downloaded}",
+        ));
+    }
+    if archive_path.exists() {
+        fs::remove_file(&archive_path)
+            .map_err(|err| format!("Failed to replace sing-box download file: {err}"))?;
+    }
+    fs::rename(&partial_path, &archive_path)
+        .map_err(|err| format!("Failed to finalize sing-box download file: {err}"))?;
     Ok(archive_path)
+}
+
+fn update_download_progress(
+    progress: &Arc<Mutex<KernelDownloadProgress>>,
+    downloaded: u64,
+    total: Option<u64>,
+) {
+    if let Ok(mut progress) = progress.lock() {
+        progress.downloaded = downloaded;
+        progress.total = total;
+    }
 }
 
 fn cached_archive_matches(archive_path: &Path, expected_size: u64) -> bool {

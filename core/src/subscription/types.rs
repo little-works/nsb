@@ -29,19 +29,11 @@ pub struct RemoteKeepFields {
 pub struct RemoteClashKeepFields {
     #[serde(default = "keep_true")]
     pub proxies: bool,
-    #[serde(default = "keep_true")]
-    pub proxy_groups: bool,
-    #[serde(default)]
-    pub rules: bool,
 }
 
 impl Default for RemoteClashKeepFields {
     fn default() -> Self {
-        Self {
-            proxies: true,
-            proxy_groups: true,
-            rules: false,
-        }
+        Self { proxies: true }
     }
 }
 

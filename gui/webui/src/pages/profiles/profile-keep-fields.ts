@@ -4,8 +4,6 @@ export function createDefaultProfileRemoteKeepFields(): ProfileRemoteKeepFields 
   return {
     clash: {
       proxies: true,
-      proxy_groups: true,
-      rules: false,
     },
     outbounds: true,
     inbounds: false,

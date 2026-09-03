@@ -12,7 +12,7 @@ use nsb_core::{
     RemoteExperimentalKeepFields, RemoteFormat, RemoteKeepFields, RemoteRouteKeepFields,
     RemoteSource, build_config, parse_remote,
 };
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 
 pub type SharedGuiRuntime = Arc<Mutex<GuiRuntime>>;
 
@@ -36,8 +36,6 @@ pub(crate) fn remote_source(remote: &ProfileRemote) -> RemoteSource {
         keep: RemoteKeepFields {
             clash: RemoteClashKeepFields {
                 proxies: remote.keep.clash.proxies,
-                proxy_groups: remote.keep.clash.proxy_groups,
-                rules: remote.keep.clash.rules,
             },
             outbounds: remote.keep.outbounds,
             inbounds: remote.keep.inbounds,
@@ -74,10 +72,7 @@ pub(crate) fn remote_source(remote: &ProfileRemote) -> RemoteSource {
                 default_domain_resolver: remote.keep.route.default_domain_resolver,
                 default_network_strategy: remote.keep.route.default_network_strategy,
                 default_network_type: remote.keep.route.default_network_type,
-                default_fallback_network_type: remote
-                    .keep
-                    .route
-                    .default_fallback_network_type,
+                default_fallback_network_type: remote.keep.route.default_fallback_network_type,
                 default_fallback_delay: remote.keep.route.default_fallback_delay,
             },
             experimental: RemoteExperimentalKeepFields {
@@ -91,11 +86,7 @@ pub(crate) fn remote_source(remote: &ProfileRemote) -> RemoteSource {
                     store_dns: remote.keep.experimental.cache_file.store_dns,
                 },
                 clash_api: RemoteExperimentalClashApiKeepFields {
-                    external_controller: remote
-                        .keep
-                        .experimental
-                        .clash_api
-                        .external_controller,
+                    external_controller: remote.keep.experimental.clash_api.external_controller,
                     external_ui: remote.keep.experimental.clash_api.external_ui,
                     external_ui_download_url: remote
                         .keep
@@ -170,10 +161,7 @@ impl GuiRuntime {
     pub async fn toggle_kernel(&mut self) -> Result<bool, String> {
         let result = self
             .controller
-            .toggle_kernel(
-                &mut self.singbox_host,
-                &self.profile_host,
-            )
+            .toggle_kernel(&mut self.singbox_host, &self.profile_host)
             .await;
         self.publish_kernel_status();
         result
@@ -182,10 +170,7 @@ impl GuiRuntime {
     pub async fn restart_kernel(&mut self) -> Result<(), String> {
         let result = self
             .controller
-            .restart_kernel(
-                &mut self.singbox_host,
-                &self.profile_host,
-            )
+            .restart_kernel(&mut self.singbox_host, &self.profile_host)
             .await;
         self.publish_kernel_status();
         result
@@ -200,10 +185,7 @@ impl GuiRuntime {
             self.singbox_host.install_binary(bytes).await?;
             if was_running {
                 self.controller
-                    .start_kernel(
-                        &mut self.singbox_host,
-                        &self.profile_host,
-                    )
+                    .start_kernel(&mut self.singbox_host, &self.profile_host)
                     .await?;
             }
             Ok(())
@@ -316,10 +298,7 @@ impl GuiRuntime {
     pub async fn auto_start_kernel_if_needed(&mut self) -> Result<bool, String> {
         let result = self
             .controller
-            .auto_start_kernel_if_needed(
-                &mut self.singbox_host,
-                &self.profile_host,
-            )
+            .auto_start_kernel_if_needed(&mut self.singbox_host, &self.profile_host)
             .await;
         self.publish_kernel_status();
         result
@@ -399,11 +378,7 @@ pub async fn update_profile_runtime(
             let snapshot = match AppController::download_profile(&remote.url, &remote.headers).await
             {
                 Ok(content) => {
-                    let snapshot = parse_remote(
-                        &remote_source(remote),
-                        &content,
-                        multi_remote,
-                    )?;
+                    let snapshot = parse_remote(&remote_source(remote), &content, multi_remote)?;
                     for warning in &snapshot.warnings {
                         log::warn!("{warning}");
                     }
@@ -434,12 +409,7 @@ pub async fn update_profile_runtime(
                             remote.name
                         ));
                     };
-                    parse_remote(
-                        &remote_source(remote),
-                        &cached,
-                        multi_remote,
-                    )
-                    .map_err(|err| {
+                    parse_remote(&remote_source(remote), &cached, multi_remote).map_err(|err| {
                         format!(
                             "Failed to parse raw cache for Remote {}: {err}",
                             remote.name

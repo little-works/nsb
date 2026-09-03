@@ -1,7 +1,7 @@
 use anyhow::Context;
 use image::ImageFormat;
 use tray_icon::{
-    Icon, TrayIcon, TrayIconBuilder,
+    Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent,
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem},
 };
 
@@ -43,7 +43,7 @@ impl TrayHost {
             .context("failed to add Exit tray menu item")?;
 
         register_menu_handler(
-            proxy,
+            proxy.clone(),
             open_item.id().clone(),
             system_proxy_item.id().clone(),
             data_dir_item.id().clone(),
@@ -56,6 +56,7 @@ impl TrayHost {
             .with_icon(load_tray_icon()?)
             .build()
             .context("failed to create tray icon")?;
+        register_tray_click_handler(proxy, tray.id().clone());
 
         Ok(Self {
             _tray: tray,
@@ -87,6 +88,25 @@ impl TrayHost {
         self.system_proxy_item.set_checked(system_proxy_enabled);
         Ok(())
     }
+}
+
+fn register_tray_click_handler(
+    proxy: tao::event_loop::EventLoopProxy<AppAction>,
+    tray_id: tray_icon::TrayIconId,
+) {
+    TrayIconEvent::set_event_handler(Some(move |event| {
+        if matches!(
+            event,
+            TrayIconEvent::Click {
+                id,
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } if id == tray_id
+        ) {
+            let _ = proxy.send_event(AppAction::OpenWebUi);
+        }
+    }));
 }
 
 enum TrayLabel {

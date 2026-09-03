@@ -37,10 +37,10 @@ export default __render<ProxyNodeCardProps>(() => {
       <div class="flex min-w-0 items-center gap-2">
         <div
           class={[
-            'h-2 w-2 shrink-0 rounded-full transition-shadow',
+            'shrink-0 rounded-full transition-shadow',
             props.item.active
-              ? 'bg-secondary ring-2 ring-secondary/30 ring-offset-1 ring-offset-surface-container-lowest'
-              : 'bg-outline',
+              ? 'h-2 w-2 bg-secondary ring-2 ring-secondary/30 ring-offset-1 ring-offset-surface-container-lowest'
+              : 'h-1 w-1 bg-outline',
           ]}
         ></div>
         <span class="min-w-0 line-clamp-3 text-sm font-medium leading-4 text-on-surface">

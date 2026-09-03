@@ -395,8 +395,9 @@ impl SingBoxHost {
 
     async fn load_sing_box_config(&self, source: &str) -> Result<SingBoxConfig, String> {
         let body = self.read_config_source(source).await?;
-        let value = serde_json::from_str(&body)
+        let mut value = serde_json::from_str::<serde_json::Value>(&body)
             .map_err(|err| format!("Failed to parse sing-box configuration: {err}"))?;
+        strip_removed_sing_box_fields(&mut value);
 
         serde_json::from_value(value)
             .map_err(|err| format!("Failed to parse sing-box configuration: {err}"))
@@ -561,6 +562,18 @@ impl SingBoxHost {
             }
 
             tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+}
+
+fn strip_removed_sing_box_fields(value: &mut serde_json::Value) {
+    let Some(rule_sets) = value.pointer_mut("/route/rule_set").and_then(|value| value.as_array_mut()) else {
+        return;
+    };
+
+    for rule_set in rule_sets {
+        if let Some(rule_set) = rule_set.as_object_mut() {
+            rule_set.remove("download_detour");
         }
     }
 }

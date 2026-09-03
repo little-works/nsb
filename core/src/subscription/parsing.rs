@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use chrono::Local;
 use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde_json::{Map, Value, json};
@@ -7,7 +5,6 @@ use serde_json::{Map, Value, json};
 use super::{RemoteFormat, RemoteSnapshot, RemoteSource};
 
 const RESERVED_TAGS: &[&str] = &["PROXY", "direct", "block"];
-const HEALTHCHECK_URL: &str = "https://www.gstatic.com/generate_204";
 
 pub fn parse_remote(
     remote: &RemoteSource,
@@ -109,7 +106,12 @@ fn selected_fields(source: &Map<String, Value>, fields: &[(&str, bool)]) -> Map<
         .iter()
         .filter_map(|(key, enabled)| {
             enabled
-                .then(|| source.get(*key).cloned().map(|value| (String::from(*key), value)))
+                .then(|| {
+                    source
+                        .get(*key)
+                        .cloned()
+                        .map(|value| (String::from(*key), value))
+                })
                 .flatten()
         })
         .collect()
@@ -178,11 +180,7 @@ fn preserved_route(value: &Value, remote: &RemoteSource, multi: bool) -> Option<
     preserved_object(selected, remote, multi)
 }
 
-fn preserved_experimental(
-    value: &Value,
-    remote: &RemoteSource,
-    multi: bool,
-) -> Option<Value> {
+fn preserved_experimental(value: &Value, remote: &RemoteSource, multi: bool) -> Option<Value> {
     let source = value.get("experimental")?.as_object()?;
     let mut selected = Map::new();
     if let Some(cache_file) = source.get("cache_file").and_then(Value::as_object) {
@@ -257,12 +255,7 @@ fn preserved_object(
     Some(value)
 }
 
-fn preserved_array(
-    value: &Value,
-    pointer: &str,
-    remote: &RemoteSource,
-    multi: bool,
-) -> Vec<Value> {
+fn preserved_array(value: &Value, pointer: &str, remote: &RemoteSource, multi: bool) -> Vec<Value> {
     value
         .pointer(pointer)
         .and_then(Value::as_array)
@@ -278,7 +271,6 @@ fn preserved_array(
 
 fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<RemoteSnapshot, String> {
     let mut nodes = Vec::new();
-    let mut groups = Vec::new();
     let mut warnings = Vec::new();
     for proxy in value
         .get("proxies")
@@ -326,45 +318,7 @@ fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<Remot
             nodes.push(normalize_tag(Value::Object(item), remote, multi)?);
         }
     }
-    if remote.keep.clash.proxy_groups {
-        for group in value
-            .get("proxy-groups")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-        {
-            if let Some(group) = convert_group(remote, group, multi, &mut warnings)? {
-                groups.push(group);
-            }
-        }
-    }
-    let rules = if remote.keep.clash.rules {
-        let retained_targets: HashSet<String> = nodes
-            .iter()
-            .chain(&groups)
-            .filter_map(|outbound| outbound.get("tag").and_then(Value::as_str))
-            .map(str::to_owned)
-            .collect();
-        value
-            .get("rules")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|rule| convert_rule(remote, rule, multi, &mut warnings))
-            .filter(|rule| clash_rule_target_is_retained(rule, &retained_targets))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    Ok(snapshot(remote, nodes, groups, rules, warnings))
-}
-
-fn clash_rule_target_is_retained(rule: &Value, retained_targets: &HashSet<String>) -> bool {
-    rule.get("outbound")
-        .and_then(Value::as_str)
-        .is_some_and(|target| {
-            matches!(target, "direct" | "block") || retained_targets.contains(target)
-        })
+    Ok(snapshot(remote, nodes, Vec::new(), Vec::new(), warnings))
 }
 
 fn snapshot(
@@ -390,99 +344,6 @@ fn snapshot(
     }
 }
 
-fn convert_group(
-    remote: &RemoteSource,
-    group: Value,
-    multi: bool,
-    warnings: &mut Vec<String>,
-) -> Result<Option<Value>, String> {
-    let mut item = group.as_object().cloned().ok_or_else(|| {
-        format!(
-            "Remote {} contains an invalid Clash proxy-group",
-            remote.name
-        )
-    })?;
-    let kind = match item
-        .remove("type")
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .as_deref()
-    {
-        Some("select") => "selector",
-        Some("url-test" | "load-balance" | "fallback") => "urltest",
-        Some(value) => {
-            warnings.push(format!(
-                "Skipped unsupported Clash group type {value} in {}",
-                remote.name
-            ));
-            return Ok(None);
-        }
-        None => {
-            warnings.push(format!(
-                "Skipped Clash group without type in {}",
-                remote.name
-            ));
-            return Ok(None);
-        }
-    };
-    let members = item.remove("proxies").unwrap_or_else(|| json!([]));
-    item.insert("outbounds".into(), rewrite_members(members, remote, multi));
-    item.remove("lazy");
-    if kind == "urltest" {
-        item.entry("url").or_insert_with(|| json!(HEALTHCHECK_URL));
-        item.entry("interval").or_insert_with(|| json!("5m"));
-        if let Some(Value::Number(number)) = item.get("interval") {
-            item.insert("interval".into(), json!(format!("{number}s")));
-        }
-    }
-    item.insert("type".into(), json!(kind));
-    normalize_tag(Value::Object(item), remote, multi).map(Some)
-}
-
-pub(super) fn convert_rule(
-    remote: &RemoteSource,
-    value: &Value,
-    multi: bool,
-    warnings: &mut Vec<String>,
-) -> Option<Value> {
-    let raw = value.as_str()?;
-    let fields: Vec<_> = raw.split(',').map(str::trim).collect();
-    if fields.len() < 2 {
-        warnings.push(format!(
-            "Skipped invalid Clash rule {raw} in {}",
-            remote.name
-        ));
-        return None;
-    }
-    let (kind, target) = (fields[0].to_ascii_uppercase(), fields.last()?.to_string());
-    let outbound = rewrite_target(&target, remote, multi);
-    let mut rule = match kind.as_str() {
-        // Sing-box route matchers are sequences, including when Clash provides
-        // just one value. Keeping that shape makes the generated configuration
-        // compatible with the typed SingBoxConfig representation and sing-box.
-        "DOMAIN" => json!({"domain": [fields[1]]}),
-        "DOMAIN-SUFFIX" => json!({"domain_suffix": [fields[1]]}),
-        "DOMAIN-KEYWORD" => json!({"domain_keyword": [fields[1]]}),
-        "IP-CIDR" | "IP-CIDR6" => json!({"ip_cidr": [fields[1]]}),
-        "PROCESS-NAME" => json!({"process_name": [fields[1]]}),
-        "DST-PORT" => json!({"port": [fields[1]]}),
-        "MATCH" => json!({}),
-        "GEOIP" => {
-            warnings.push(format!("Skipped Clash GEOIP rule {raw} in {}", remote.name));
-            return None;
-        }
-        _ => {
-            warnings.push(format!(
-                "Skipped unsupported Clash rule {raw} in {}",
-                remote.name
-            ));
-            return None;
-        }
-    };
-    rule["action"] = json!("route");
-    rule["outbound"] = json!(outbound);
-    Some(rule)
-}
-
 fn rewrite_target(target: &str, remote: &RemoteSource, multi: bool) -> String {
     match target {
         value if value.eq_ignore_ascii_case("DIRECT") => "direct".into(),
@@ -498,23 +359,6 @@ fn rewrite_target(target: &str, remote: &RemoteSource, multi: bool) -> String {
         value if multi => format!("{}:{value}", remote.name),
         value => value.into(),
     }
-}
-
-fn rewrite_members(value: Value, remote: &RemoteSource, multi: bool) -> Value {
-    Value::Array(
-        value
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|value| {
-                Value::String(rewrite_target(
-                    value.as_str().unwrap_or_default(),
-                    remote,
-                    multi,
-                ))
-            })
-            .collect(),
-    )
 }
 
 fn rewrite_source_references(value: &mut Value, remote: &RemoteSource, multi: bool) {

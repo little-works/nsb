@@ -4,6 +4,7 @@ export {
   deleteProfile,
   deleteTemplate,
   downloadLatestKernel,
+  fetchKernelDownloadProgress,
   fetchAutoLaunchEnabled,
   fetchLatestKernelRelease,
   fetchKernelVersion,

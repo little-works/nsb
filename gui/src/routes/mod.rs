@@ -42,6 +42,14 @@ pub struct RouteState {
     pub runtime: SharedRuntime,
     pub app_action_proxy: tao::event_loop::EventLoopProxy<AppAction>,
     pub kernel_download_in_progress: Arc<AtomicBool>,
+    pub kernel_download_progress: Arc<std::sync::Mutex<KernelDownloadProgress>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct KernelDownloadProgress {
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    pub in_progress: bool,
 }
 
 pub fn build_router(
@@ -68,6 +76,10 @@ pub fn build_router(
         .route(
             "/api/kernel/download",
             post(api::kernel::download_latest_kernel),
+        )
+        .route(
+            "/api/kernel/download/progress",
+            get(api::kernel::get_kernel_download_progress),
         )
         .route("/api/score/proxies", get(api::score::get_proxies))
         .route("/api/score/connections", get(api::score::get_connections))
@@ -136,6 +148,9 @@ pub fn build_router(
             runtime,
             app_action_proxy,
             kernel_download_in_progress: Arc::new(AtomicBool::new(false)),
+            kernel_download_progress: Arc::new(std::sync::Mutex::new(
+                KernelDownloadProgress::default(),
+            )),
         })
 }
 
