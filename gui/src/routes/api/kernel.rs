@@ -40,6 +40,11 @@ pub struct KernelReleaseInfo {
 }
 
 #[derive(Clone, Serialize)]
+pub struct KernelDownloadStartResponse {
+    started: bool,
+}
+
+#[derive(Clone, Serialize)]
 pub struct RuntimeStatusResponse {
     pub kernel: KernelInfo,
 }
@@ -215,7 +220,7 @@ pub async fn import_kernel_binary(
 
 pub async fn download_latest_kernel(
     State(ctx): State<RouteState>,
-) -> Json<ApiResponse<KernelReleaseInfo>> {
+) -> Json<ApiResponse<KernelDownloadStartResponse>> {
     if ctx
         .kernel_download_in_progress
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -231,10 +236,6 @@ pub async fn download_latest_kernel(
             None,
         ));
     }
-    let _download_guard = KernelDownloadGuard {
-        in_progress: ctx.kernel_download_in_progress.clone(),
-        progress: ctx.kernel_download_progress.clone(),
-    };
     if let Ok(mut progress) = ctx.kernel_download_progress.lock() {
         *progress = KernelDownloadProgress {
             in_progress: true,
@@ -243,17 +244,27 @@ pub async fn download_latest_kernel(
     }
 
     crate::route_log!(ctx, "info", "starting latest sing-box kernel download.");
-    let release = match fetch_latest_release().await {
-        Ok(release) => release,
-        Err(err) => {
-            crate::route_log!(
-                ctx,
-                "warn",
-                "failed to fetch latest sing-box release: {err}"
-            );
-            return Json(ApiResponse::failure(err, None));
+    tokio::spawn(async move {
+        let _download_guard = KernelDownloadGuard {
+            in_progress: ctx.kernel_download_in_progress.clone(),
+            progress: ctx.kernel_download_progress.clone(),
+        };
+        if let Err(err) = download_latest_kernel_in_background(ctx).await {
+            log::warn!("failed to download and replace sing-box kernel: {err}");
         }
-    };
+    });
+
+    Json(ApiResponse::success(
+        String::from("sing-box core download started."),
+        Some(KernelDownloadStartResponse { started: true }),
+    ))
+}
+
+async fn download_latest_kernel_in_background(ctx: RouteState) -> Result<(), String> {
+    let release = fetch_latest_release().await.map_err(|err| {
+        log::warn!("failed to fetch latest sing-box release: {err}");
+        err
+    })?;
     let version = release.tag_name.clone();
     let asset_name = kernel_asset_name(&version);
     let Some(asset) = release
@@ -261,15 +272,9 @@ pub async fn download_latest_kernel(
         .into_iter()
         .find(|asset| asset.name == asset_name)
     else {
-        crate::route_log!(
-            ctx,
-            "warn",
-            "sing-box release asset for the current platform was not found: {asset_name}"
-        );
-        return Json(ApiResponse::failure(
-            format!("sing-box release asset for the current platform was not found: {asset_name}"),
-            None,
-        ));
+        let err = format!("sing-box release asset for the current platform was not found: {asset_name}");
+        log::warn!("{err}");
+        return Err(err);
     };
     update_download_progress(&ctx.kernel_download_progress, 0, Some(asset.size));
     crate::route_log!(
@@ -300,24 +305,17 @@ pub async fn download_latest_kernel(
             asset.size
         );
     }
-    let archive_path = match download_release_asset(
+    let archive_path = download_release_asset(
         &asset.browser_download_url,
         archive_path,
         asset.size,
         ctx.kernel_download_progress.clone(),
     )
     .await
-    {
-        Ok(archive_path) => archive_path,
-        Err(err) => {
-            crate::route_log!(
-                ctx,
-                "warn",
-                "failed to download sing-box release asset: {err}"
-            );
-            return Json(ApiResponse::failure(err, None));
-        }
-    };
+    .map_err(|err| {
+        log::warn!("failed to download sing-box release asset: {err}");
+        err
+    })?;
     crate::route_log!(
         ctx,
         "info",
@@ -325,17 +323,10 @@ pub async fn download_latest_kernel(
         archive_path.display(),
         asset.size
     );
-    let binary = match unpack_kernel_binary(&data_dir, &archive_path) {
-        Ok(binary) => binary,
-        Err(err) => {
-            crate::route_log!(
-                ctx,
-                "warn",
-                "failed to extract sing-box release asset: {err}"
-            );
-            return Json(ApiResponse::failure(err, None));
-        }
-    };
+    let binary = unpack_kernel_binary(&data_dir, &archive_path).map_err(|err| {
+        log::warn!("failed to extract sing-box release asset: {err}");
+        err
+    })?;
     crate::route_log!(
         ctx,
         "info",
@@ -344,23 +335,12 @@ pub async fn download_latest_kernel(
     );
 
     let mut guard = ctx.runtime.lock().await;
-    match guard.replace_kernel_binary(&binary).await {
-        Ok(()) => {
-            crate::route_log!(
-                ctx,
-                "info",
-                "sing-box core downloaded and replaced: version={version}"
-            );
-            Json(ApiResponse::success(
-                String::from("sing-box core downloaded and replaced."),
-                Some(KernelReleaseInfo { version }),
-            ))
-        }
-        Err(err) => {
-            crate::route_log!(ctx, "warn", "failed to replace sing-box kernel: {err}");
-            Json(ApiResponse::failure(err, None))
-        }
-    }
+    guard.replace_kernel_binary(&binary).await.map_err(|err| {
+        log::warn!("failed to replace sing-box kernel: {err}");
+        err
+    })?;
+    log::info!("sing-box core downloaded and replaced: version={version}");
+    Ok(())
 }
 
 async fn fetch_latest_release() -> Result<GithubRelease, String> {

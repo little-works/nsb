@@ -34,9 +34,11 @@ const downloadQuery = useClientQuery({
 const downloadProgressQuery = useClientQuery({
   queryKey: ['kernelDownloadProgress'],
   queryFn: fetchKernelDownloadProgress,
-  enabled: false,
+  refetchInterval: (query) => (query.state.data?.in_progress ? 500 : false),
 });
-const downloading = computed(() => downloadQuery.isFetching.value);
+const downloading = computed(
+  () => downloadProgressQuery.data.value?.in_progress ?? false,
+);
 const downloadPercent = computed(() => {
   const progress = downloadProgressQuery.data.value;
   if (!progress?.total || progress.total <= 0) {
@@ -87,10 +89,6 @@ async function downloadKernel() {
     return;
   }
 
-  const progressTimer = window.setInterval(() => {
-    void downloadProgressQuery.refetch();
-  }, 500);
-  void downloadProgressQuery.refetch();
   try {
     const result = await downloadQuery.refetch();
     if (result.error) {
@@ -99,13 +97,7 @@ async function downloadKernel() {
     if (!result.data) {
       throw new Error(i18n.global.t('errors.kernelDownload'));
     }
-    const release = result.data;
-    await props.onReload?.();
-    toast.info({
-      title: i18n.global.t('errors.kernelInstalled', {
-        version: release.version,
-      }),
-    });
+    void downloadProgressQuery.refetch();
   } catch (error) {
     toast.error({
       content:
@@ -114,9 +106,6 @@ async function downloadKernel() {
           : i18n.global.t('errors.kernelDownload'),
       title: i18n.global.t('errors.kernelAction'),
     });
-  } finally {
-    window.clearInterval(progressTimer);
-    void downloadProgressQuery.refetch();
   }
 }
 

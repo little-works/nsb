@@ -21,6 +21,10 @@ export interface KernelReleaseInfo {
   version: string;
 }
 
+export interface KernelDownloadStartResponse {
+  started: boolean;
+}
+
 export interface KernelDownloadProgress {
   downloaded: number;
   total: number | null;
@@ -48,7 +52,9 @@ export function fetchLatestKernelRelease() {
 }
 
 export function downloadLatestKernel() {
-  return kernelDownloadRequest.post<KernelReleaseInfo>('/api/kernel/download');
+  return kernelDownloadRequest.post<KernelDownloadStartResponse>(
+    '/api/kernel/download',
+  );
 }
 
 export function fetchKernelDownloadProgress() {
