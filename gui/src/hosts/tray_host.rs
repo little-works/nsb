@@ -53,6 +53,7 @@ impl TrayHost {
         let tray = TrayIconBuilder::new()
             .with_tooltip("nsb")
             .with_menu(Box::new(menu))
+            .with_menu_on_left_click(false)
             .with_icon(load_tray_icon()?)
             .build()
             .context("failed to create tray icon")?;
