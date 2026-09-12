@@ -4,8 +4,10 @@ import { Icon } from '@/components/icon';
 import {
   BoltOutlined,
   ExpandMoreOutlined,
+  MyLocationOutlined,
   PublicOutlined,
 } from '@vicons/material';
+import { nextTick } from 'vue';
 import ProxyNodeCard from './proxy-node-card.setup';
 import type { ProxyGroup } from './types';
 import { useI18n } from 'vue-i18n';
@@ -20,6 +22,23 @@ export interface ProxyGroupSectionProps {
 }
 
 const props = defineProps<ProxyGroupSectionProps>();
+
+function scrollToActiveNode() {
+  if (!props.group.items.some((item) => item.active)) {
+    return;
+  }
+
+  if (!props.expanded) {
+    props.onToggle?.();
+  }
+
+  void nextTick(() => {
+    document
+      .getElementById(props.anchorId)
+      ?.querySelector<HTMLElement>('[data-active-proxy-node]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
 
 defineOptions({ name: 'ProxyGroupSection' });
 const { t } = useI18n();
@@ -79,6 +98,17 @@ export default __render<ProxyGroupSectionProps>(() => {
           </IconButton>
           <IconButton
             class="ml-1"
+            disabled={!props.group.items.some((item) => item.active)}
+            tooltip={t('home.locateActive')}
+            onClick={(e) => {
+              e.stopPropagation();
+              scrollToActiveNode();
+            }}
+          >
+            <MyLocationOutlined />
+          </IconButton>
+          <IconButton
+            class="ml-1"
             tooltip={t('home.testLatency')}
             onClick={async (e) => {
               e.stopPropagation();
@@ -97,7 +127,10 @@ export default __render<ProxyGroupSectionProps>(() => {
         <div class="rounded-b bg-surface p-4 border border-outline-variant border-t-0">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {props.group.items.map((item) => (
-              <div key={`${props.group.title}-${item.name}`}>
+              <div
+                key={`${props.group.title}-${item.name}`}
+                data-active-proxy-node={item.active || undefined}
+              >
                 <ProxyNodeCard
                   item={item}
                   onSwitch={
