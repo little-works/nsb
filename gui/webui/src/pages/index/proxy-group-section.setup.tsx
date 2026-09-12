@@ -40,6 +40,14 @@ function scrollToActiveNode() {
   });
 }
 
+function handleHeaderClick(event: MouseEvent) {
+  if (event.target instanceof Element && event.target.closest('button')) {
+    return;
+  }
+
+  props.onToggle?.();
+}
+
 defineOptions({ name: 'ProxyGroupSection' });
 const { t } = useI18n();
 
@@ -55,7 +63,7 @@ export default __render<ProxyGroupSectionProps>(() => {
           'bg-background',
           props.expanded ? 'sticky top-36 z-sticky' : '',
         ]}
-        onClick={props.onToggle}
+        onClick={handleHeaderClick}
       >
         <div
           class={[
@@ -93,6 +101,10 @@ export default __render<ProxyGroupSectionProps>(() => {
               props.expanded ? 'rotate-180' : '',
             ]}
             tooltip={t(props.expanded ? 'home.collapse' : 'home.expand')}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggle?.();
+            }}
           >
             <ExpandMoreOutlined />
           </IconButton>
