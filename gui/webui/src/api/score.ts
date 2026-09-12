@@ -28,15 +28,8 @@ export async function selectScoreProxy(group: string, name: string) {
   await request.put<boolean>(`/api/score/proxies/${group}`, { name });
 }
 
-export function getScoreProxyDelay(
-  proxy: string,
-  url: string,
-  timeout: number,
-) {
-  return request.get<Record<string, number>>(
-    `/api/score/proxies/${proxy}/delay`,
-    { url, timeout },
-  );
+export function startScoreLatencyTest(proxies: string[]) {
+  return request.post<boolean>('/api/score/latency', { proxies });
 }
 
 export function getScoreLogHistory() {

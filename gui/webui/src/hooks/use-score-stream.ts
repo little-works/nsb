@@ -1,6 +1,7 @@
 import type {
   CoreApiConnectionsData,
   CoreApiLogsData,
+  CoreApiProxyLatencyResult,
   CoreApiTrafficData,
   CoreApiWsMessage,
   RuntimeStatus,
@@ -16,6 +17,7 @@ const RECONNECT_DELAY = 1_000;
 
 const traffic = ref<CoreApiTrafficData>({ down: 0, up: 0 });
 const connections = ref<CoreApiConnectionsData | null>(null);
+const latencyResults = ref<Record<string, CoreApiProxyLatencyResult>>({});
 const connectionState = ref<'connecting' | 'connected' | 'disconnected'>(
   'disconnected',
 );
@@ -75,11 +77,34 @@ function isLogsData(value: unknown): value is CoreApiLogsData | string {
   );
 }
 
+function isProxyLatencyResult(
+  value: unknown,
+): value is CoreApiProxyLatencyResult {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    typeof value.alive === 'boolean' &&
+    (value.latencyMs === null || typeof value.latencyMs === 'number')
+  );
+}
+
+function isProxyLatencyResults(
+  value: unknown,
+): value is CoreApiProxyLatencyResult[] {
+  return Array.isArray(value) && value.every(isProxyLatencyResult);
+}
+
+function indexLatencyResults(results: CoreApiProxyLatencyResult[]) {
+  return Object.fromEntries(results.map((result) => [result.name, result]));
+}
+
 type ScoreMessage =
   | CoreApiWsMessage<'traffic'>
   | CoreApiWsMessage<'connections'>
   | CoreApiWsMessage<'logs'>
-  | CoreApiWsMessage<'runtime'>;
+  | CoreApiWsMessage<'runtime'>
+  | CoreApiWsMessage<'latency_snapshot'>
+  | CoreApiWsMessage<'latency_update'>;
 
 function isScoreMessage(value: unknown): value is ScoreMessage {
   if (!isRecord(value) || typeof value.type !== 'string') {
@@ -94,6 +119,9 @@ function isScoreMessage(value: unknown): value is ScoreMessage {
       return isLogsData(value.data);
     case 'runtime':
       return isRuntimeStatus(value.data);
+    case 'latency_snapshot':
+    case 'latency_update':
+      return isProxyLatencyResults(value.data);
     default:
       return false;
   }
@@ -157,6 +185,15 @@ function connect() {
           runtimeListeners.forEach((listener) => listener(message.data));
           break;
         }
+        case 'latency_snapshot':
+          latencyResults.value = indexLatencyResults(message.data);
+          break;
+        case 'latency_update':
+          latencyResults.value = {
+            ...latencyResults.value,
+            ...indexLatencyResults(message.data),
+          };
+          break;
       }
     } catch (error) {
       console.error('Failed to parse score stream message:', error);
@@ -242,6 +279,7 @@ export function useScoreStreamData() {
     connections: readonly(connections),
     connectionState: readonly(connectionState),
     failureNotificationVersion: readonly(failureNotificationVersion),
+    latencyResults: readonly(latencyResults),
     subscribeLogs: subscribeScoreLogs,
   };
 }

@@ -1,17 +1,23 @@
 import {
   getScoreConfig,
   getScoreProxies,
-  getScoreProxyDelay,
   selectScoreProxy,
   setScoreMode,
+  startScoreLatencyTest,
 } from '@/api/score';
 import { useClientQuery } from '@/hooks/use-client-query';
+import { useScoreStreamData } from '@/hooks/use-score-stream';
 import { useRuntimeStatus } from '@/store/app';
-import type { RuntimeStatus, CoreApiProxies, CoreApiProxy } from '@/types';
+import type {
+  CoreApiProxies,
+  CoreApiProxy,
+  CoreApiProxyLatencyResult,
+  RuntimeStatus,
+} from '@/types';
 import { useLocalStorage } from '@vueuse/core';
 import { defineStore } from 'pinia';
-import pLimit from 'p-limit';
 import { computed, ref, watch } from 'vue';
+import { toast } from '@/components/toast';
 import type {
   ProxyGroup,
   ProxyItem,
@@ -22,17 +28,6 @@ import { i18n } from '@/i18n';
 
 const HIDE_UNAVAILABLE_NODES_KEY = 'nsb-hide-unavailable-nodes';
 const PROXY_SORT_MODE_KEY = 'nsb-proxy-sort-mode';
-// https://www.gstatic.com/generate_204
-const PROXY_DELAY_TEST_URL = 'https://cp.cloudflare.com/generate_204';
-const PROXY_DELAY_TIMEOUT_MS = 5000;
-const PROXY_DELAY_CONCURRENCY = 4;
-
-interface ProxyLatencyOverride {
-  alive?: boolean;
-  latencyMs?: number;
-}
-
-const proxyLatencyCache = new Map<string, ProxyLatencyOverride>();
 
 function isKernelReady(snapshot: RuntimeStatus) {
   return snapshot.kernel.status === 'Running';
@@ -57,29 +52,24 @@ function applyRuntimeState(
   {
     latencyOverrides = {},
   }: {
-    latencyOverrides?: Record<string, ProxyLatencyOverride>;
+    latencyOverrides?: Record<string, CoreApiProxyLatencyResult>;
   } = {},
 ) {
   return groups.map((group) => ({
     ...group,
-    items: group.items.map((item) => ({
-      ...item,
-      alive: latencyOverrides[item.name]?.alive ?? item.alive,
-      latency: formatLatency(
-        latencyOverrides[item.name]?.latencyMs ?? item.latencyMs,
-      ),
-      latencyMs: latencyOverrides[item.name]?.latencyMs ?? item.latencyMs,
-    })),
+    items: group.items.map((item) => {
+      const override = latencyOverrides[item.name];
+      const latencyMs = override
+        ? (override.latencyMs ?? undefined)
+        : item.latencyMs;
+      return {
+        ...item,
+        alive: override?.alive ?? item.alive,
+        latency: formatLatency(latencyMs),
+        latencyMs,
+      };
+    }),
   }));
-}
-
-function getProxyDelayMs(payload: Record<string, number>) {
-  for (const value of Object.values(payload)) {
-    if (typeof value === 'number' && value > 0) {
-      return value;
-    }
-  }
-  return undefined;
 }
 
 function mapProxyGroups(payload: CoreApiProxies): ProxyGroup[] {
@@ -183,9 +173,7 @@ function normalizeProxyMode(value: string | undefined): ProxyMode {
 
 export const useHomeStore = defineStore('home', () => {
   const runtimeStatus = useRuntimeStatus();
-  const latencyOverrides = ref<Record<string, ProxyLatencyOverride>>(
-    Object.fromEntries(proxyLatencyCache),
-  );
+  const { latencyResults } = useScoreStreamData();
   let switchingProxy = false;
   const switchingProxyMode = ref(false);
   const searchKeyword = ref('');
@@ -258,7 +246,7 @@ export const useHomeStore = defineStore('home', () => {
 
   const displayProxyGroups = computed(() =>
     applyRuntimeState(proxyGroupsQuery.data.value ?? [], {
-      latencyOverrides: latencyOverrides.value,
+      latencyOverrides: latencyResults.value,
     }),
   );
 
@@ -439,53 +427,12 @@ export const useHomeStore = defineStore('home', () => {
       }
 
       actionErrorMessage.value = '';
-
-      const limit = pLimit(PROXY_DELAY_CONCURRENCY);
-
-      for (
-        let index = 0;
-        index < targetGroup.items.length;
-        index += PROXY_DELAY_CONCURRENCY
-      ) {
-        const batch = targetGroup.items.slice(
-          index,
-          index + PROXY_DELAY_CONCURRENCY,
-        );
-        const results = await Promise.all(
-          batch.map((item) =>
-            limit(async () => {
-              try {
-                const response = await getScoreProxyDelay(
-                  item.name,
-                  PROXY_DELAY_TEST_URL,
-                  PROXY_DELAY_TIMEOUT_MS,
-                );
-                const latencyMs = getProxyDelayMs(response);
-                return {
-                  alive: latencyMs != null,
-                  latencyMs,
-                  name: item.name,
-                };
-              } catch {
-                return {
-                  alive: false,
-                  latencyMs: undefined,
-                  name: item.name,
-                };
-              }
-            }),
-          ),
-        );
-
-        for (const result of results) {
-          proxyLatencyCache.set(result.name, {
-            alive: result.alive,
-            latencyMs: result.latencyMs,
-          });
-        }
-        latencyOverrides.value = Object.fromEntries(proxyLatencyCache);
+      const accepted = await startScoreLatencyTest(
+        targetGroup.items.map((item) => item.name),
+      );
+      if (!accepted) {
+        toast.info({ title: i18n.global.t('home.latencyInProgress') });
       }
-      await proxyGroupsQuery.refetch();
     } catch (error) {
       actionErrorMessage.value =
         error instanceof Error

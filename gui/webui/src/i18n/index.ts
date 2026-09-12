@@ -77,6 +77,7 @@ const enUS = {
     switchFailed: 'Failed to switch proxy.',
     groupNotFound: 'Proxy group was not found.',
     latencyFailed: 'Latency test failed.',
+    latencyInProgress: 'A latency test is already in progress.',
   },
   traffic: {
     running: 'Running',
@@ -452,6 +453,7 @@ const zhCN = {
     switchFailed: '切换节点失败。',
     groupNotFound: '未找到对应的代理组。',
     latencyFailed: '测速失败。',
+    latencyInProgress: '测速任务正在进行中。',
   },
   traffic: {
     running: '运行中',

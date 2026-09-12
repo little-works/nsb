@@ -155,6 +155,7 @@ pub async fn toggle_kernel(
 pub async fn restart_kernel(
     State(ctx): State<RouteState>,
 ) -> Json<ApiResponse<RuntimeStatusResponse>> {
+    let _ = ctx.latency_cancellation.send(());
     let mut guard = ctx.runtime.lock().await;
     let result = guard.restart_kernel().await;
     guard.sync_runtime().await;

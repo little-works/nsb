@@ -52,6 +52,12 @@ export interface CoreApiLogsData {
   payload: string;
 }
 
+export interface CoreApiProxyLatencyResult {
+  name: string;
+  alive: boolean;
+  latencyMs: number | null;
+}
+
 export interface CoreApiConnectionsData {
   memory: number;
   uploadTotal: number;
@@ -84,6 +90,8 @@ export type CoreApiWsDataMap = {
   traffic: CoreApiTrafficData;
   connections: CoreApiConnectionsData;
   runtime: RuntimeStatus;
+  latency_snapshot: CoreApiProxyLatencyResult[];
+  latency_update: CoreApiProxyLatencyResult[];
 };
 
 export interface CoreApiWsMessage<K extends keyof CoreApiWsDataMap> {

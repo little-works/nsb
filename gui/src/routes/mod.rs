@@ -1,6 +1,7 @@
 pub mod api;
 mod webui;
 
+use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -14,7 +15,7 @@ use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use log::info;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 
 use crate::app::{AppAction, GuiRuntime};
 
@@ -43,6 +44,10 @@ pub struct RouteState {
     pub app_action_proxy: tao::event_loop::EventLoopProxy<AppAction>,
     pub kernel_download_in_progress: Arc<AtomicBool>,
     pub kernel_download_progress: Arc<std::sync::Mutex<KernelDownloadProgress>>,
+    pub latency_cache: Arc<Mutex<HashMap<String, crate::routes::api::score::ProxyLatencyResult>>>,
+    pub latency_test_in_progress: Arc<AtomicBool>,
+    pub latency_updates: broadcast::Sender<Vec<crate::routes::api::score::ProxyLatencyResult>>,
+    pub latency_cancellation: broadcast::Sender<()>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -88,10 +93,7 @@ pub fn build_router(
             get(api::score::get_config).patch(api::score::set_proxy_mode),
         )
         .route("/api/score/proxies/{group}", put(api::score::select_proxy))
-        .route(
-            "/api/score/proxies/{proxy}/delay",
-            get(api::score::get_proxy_delay),
-        )
+        .route("/api/score/latency", post(api::score::start_latency_test))
         .route("/api/score/stream", get(api::score::stream_score))
         .route("/api/score/logs/history", get(api::score::get_log_history))
         .route("/api/score/logs", post(api::score::clear_logs))
@@ -151,6 +153,10 @@ pub fn build_router(
             kernel_download_progress: Arc::new(std::sync::Mutex::new(
                 KernelDownloadProgress::default(),
             )),
+            latency_cache: Arc::new(Mutex::new(HashMap::new())),
+            latency_test_in_progress: Arc::new(AtomicBool::new(false)),
+            latency_updates: broadcast::channel(64).0,
+            latency_cancellation: broadcast::channel(16).0,
         })
 }
 

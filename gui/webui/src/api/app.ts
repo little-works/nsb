@@ -14,8 +14,9 @@ import type {
 
 const request = new Request();
 const kernelDownloadRequest = new Request({ timeout: 300_000 });
-const profileActivationRequest = new Request({ timeout: 60_000 });
-const profileRefreshRequest = new Request({ timeout: 60_000 });
+const kernelOperationRequest = new Request({ timeout: 90_000 });
+const profileActivationRequest = new Request({ timeout: 90_000 });
+const profileRefreshRequest = new Request({ timeout: 90_000 });
 
 export interface KernelReleaseInfo {
   version: string;
@@ -36,11 +37,11 @@ export function fetchRuntime() {
 }
 
 export function toggleKernel() {
-  return request.post<RuntimeStatus>('/api/kernel/toggle');
+  return kernelOperationRequest.post<RuntimeStatus>('/api/kernel/toggle');
 }
 
 export function restartKernel() {
-  return profileActivationRequest.post<RuntimeStatus>('/api/kernel/restart');
+  return kernelOperationRequest.post<RuntimeStatus>('/api/kernel/restart');
 }
 
 export function fetchKernelVersion() {

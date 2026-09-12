@@ -28,7 +28,7 @@ use crate::utils::command::command;
 use crate::utils::path::ensure_data_dir;
 
 static SECRET_COUNTER: AtomicU64 = AtomicU64::new(0);
-const CONTROLLER_START_TIMEOUT_SECS: u64 = 30;
+const CONTROLLER_START_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
 pub struct LaunchConfig {
