@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Button } from '@/components/button';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ProxyGroup } from './types';

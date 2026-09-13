@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { computed, useAttrs, type InputHTMLAttributes } from 'vue';
 
 defineOptions({ name: 'Input', inheritAttrs: false });

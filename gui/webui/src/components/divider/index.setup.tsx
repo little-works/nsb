@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import type { HTMLAttributes } from 'vue';
 
 export type DividerOrientation = 'horizontal' | 'vertical';

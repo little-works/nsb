@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import type { ProxyItem } from './types';
 import { useI18n } from 'vue-i18n';
 

@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useHomeStore } from '@/store/home';
 import { storeToRefs } from 'pinia';
 import OverviewPage from './overview-page.setup';

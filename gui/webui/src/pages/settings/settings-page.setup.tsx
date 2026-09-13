@@ -1,7 +1,7 @@
 import AppearanceSection from '@/pages/settings/appearance-section.setup';
 import GeneralSection from '@/pages/settings/general-section.setup';
 import KernelInfoSection from '@/pages/settings/kernel-info-section.setup';
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { IconButton } from '@/components/button';
 import { Page, PageContent } from '@/components/page-content';
 import { useSettingsStore } from '@/store/settings';

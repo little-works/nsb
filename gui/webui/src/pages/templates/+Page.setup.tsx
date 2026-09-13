@@ -9,7 +9,7 @@ import { Input } from '@/components/input';
 import { Page, PageContent } from '@/components/page-content';
 import { toast } from '@/components/toast';
 import TemplateJsonEditor from '@/pages/profiles/profile-node-editor.setup';
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useTemplates } from '@/store/app';
 import type { ProfileTemplate } from '@/types';
 import {

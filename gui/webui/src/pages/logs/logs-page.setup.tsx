@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { clearScoreLogs, getScoreLogHistory } from '@/api/score';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { useScoreStreamData } from '@/hooks/use-score-stream';

@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { TransitionGroup } from 'vue';
 import Toast from './index.setup';
 import { dismissToast, pauseToast, resumeToast, toasts } from './toast-manager';

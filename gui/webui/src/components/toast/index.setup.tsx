@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { IconButton } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { useI18n } from 'vue-i18n';

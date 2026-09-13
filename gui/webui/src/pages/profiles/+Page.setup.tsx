@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import ProfilesPage from './profiles-page.setup';
 
 defineOptions({ name: 'ProfilesRoutePage' });

@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { computed, useSlots, type HTMLAttributes } from 'vue';
 import './style.css';
 

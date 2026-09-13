@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Button, IconButton } from '@/components/button';
 import { Dropdown, type DropdownSlotProps } from '@/components/dropdown';
 import { Icon } from '@/components/icon';

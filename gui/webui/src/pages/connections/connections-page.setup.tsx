@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useScoreStreamData } from '@/hooks/use-score-stream';
 import { Icon } from '@/components/icon';
 import { Page, PageContent } from '@/components/page-content';

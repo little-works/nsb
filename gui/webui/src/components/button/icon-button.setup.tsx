@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Icon } from '@/components/icon';
 import { DonutLargeOutlined } from '@vicons/material';
 import {

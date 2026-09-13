@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Button } from '@/components/button';
 import { Checkbox } from '@/components/checkbox';
 import { Icon } from '@/components/icon';

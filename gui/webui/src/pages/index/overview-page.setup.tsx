@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { IconButton } from '@/components/button';
 import { Page, PageContent, PageHeader } from '@/components/page-content';
 import { useFloatingDockStore } from '@/store/floating-dock';

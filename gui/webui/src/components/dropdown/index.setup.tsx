@@ -3,7 +3,7 @@ import {
   type PopoverProps,
   type PopoverSlotProps,
 } from '@/components/popover';
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useAttrs, useSlots, type HTMLAttributes } from 'vue';
 
 defineOptions({ name: 'Dropdown', inheritAttrs: false });

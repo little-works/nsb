@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Icon } from '@/components/icon';
 import { Tooltip, type TooltipWithPopoverProps } from '@/components/tooltip';
 import { DonutLargeOutlined } from '@vicons/material';

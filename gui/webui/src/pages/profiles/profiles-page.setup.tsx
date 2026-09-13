@@ -11,7 +11,7 @@ import { Page, PageContent } from '@/components/page-content';
 import ProfileNodeEditor from '@/pages/profiles/profile-node-editor.setup';
 import { toast } from '@/components/toast';
 import ProfilesTable from '@/pages/profiles/profiles-table.setup';
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useProfiles, useRuntimeStatus } from '@/store/app';
 import { AddOutlined, FileUploadOutlined } from '@vicons/material';
 import { fileOpen } from 'browser-fs-access';

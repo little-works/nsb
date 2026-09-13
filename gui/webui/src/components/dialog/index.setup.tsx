@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { IconButton } from '@/components/button';
 import { CloseOutlined } from '@vicons/material';
 import { Dialog as V0Dialog } from '@vuetify/v0';

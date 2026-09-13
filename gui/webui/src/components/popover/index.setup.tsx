@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import {
   Popover as V0Popover,
   type PopoverActivatorSlotProps,

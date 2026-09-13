@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import SettingsPage from './settings-page.setup';
 
 defineOptions({ name: 'SettingsRoutePage' });

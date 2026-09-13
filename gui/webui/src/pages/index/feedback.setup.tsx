@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { Icon } from '@/components/icon';
 import { Tooltip } from '@/components/tooltip';
 import { WarningAmberOutlined } from '@vicons/material';

@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { useScoreStreamConnection } from '@/hooks/use-score-stream';
 import { useAppPageType } from '@/store/app';
 import { useSlots } from 'vue';

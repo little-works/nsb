@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { h, useSlots } from 'vue';
 import type { NavItem } from '../../pages/index/types';
 import { type AppPageTypes } from '@/types';

@@ -1,4 +1,4 @@
-import { __render } from '@/shared/helpter';
+import { __render } from '@/shared/helper';
 import { saveAppLanguage } from '@/api/client';
 import { Icon } from '@/components/icon';
 import { Select } from '@/components/select';
