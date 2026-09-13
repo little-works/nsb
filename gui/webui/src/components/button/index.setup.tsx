@@ -1,7 +1,7 @@
 import { __render } from '@/shared/helpter';
 import { Icon } from '@/components/icon';
 import { Tooltip, type TooltipWithPopoverProps } from '@/components/tooltip';
-import { AutorenewOutlined } from '@vicons/material';
+import { DonutLargeOutlined } from '@vicons/material';
 import {
   computed,
   onBeforeUnmount,
@@ -132,7 +132,7 @@ function renderLoadingSlot() {
   return (
     slots.loading?.() ?? (
       <Icon class="animate-spin text-base">
-        <AutorenewOutlined />
+        <DonutLargeOutlined />
       </Icon>
     )
   );

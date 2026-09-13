@@ -1,6 +1,6 @@
 import { __render } from '@/shared/helpter';
 import { Icon } from '@/components/icon';
-import { AutorenewOutlined } from '@vicons/material';
+import { DonutLargeOutlined } from '@vicons/material';
 import {
   useAttrs,
   useSlots,
@@ -33,7 +33,7 @@ export default __render<IconButtonProps & ButtonProps & ButtonHTMLAttributes>(
         ),
         loading: () => (
           <Icon class={['animate-spin text-lg', props.iconClass]}>
-            <AutorenewOutlined />
+            <DonutLargeOutlined />
           </Icon>
         ),
         tooltip: slots.tooltip,
