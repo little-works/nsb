@@ -213,12 +213,15 @@ export default __render(() => {
                 : 'outline'
             }
             onClick={runKernelAction}
-          >
-            <Icon class="text-base">
-              <RestartAltOutlined />
-            </Icon>
-            {actionLabel.value}
-          </Button>
+            v-slots={{
+              icon: () => (
+                <Icon class="text-base">
+                  <RestartAltOutlined />
+                </Icon>
+              ),
+              default: () => actionLabel.value,
+            }}
+          />
         ) : null}
       </div>
     </section>

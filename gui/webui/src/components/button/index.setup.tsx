@@ -138,6 +138,10 @@ function renderLoadingSlot() {
   );
 }
 
+function renderIconSlot() {
+  return loading.value ? renderLoadingSlot() : slots.icon?.();
+}
+
 export default __render<ButtonProps & ButtonHTMLAttributes>(() => {
   const Tag = props.tag;
   const disabled = props.disabled || pending.value;
@@ -155,17 +159,17 @@ export default __render<ButtonProps & ButtonHTMLAttributes>(() => {
       class={className.value}
       onClick={handleClick}
     >
-      {loading.value ? (
-        props.iconOnly ? (
+      {props.iconOnly ? (
+        loading.value ? (
           renderLoadingSlot()
         ) : (
-          <>
-            {renderLoadingSlot()}
-            {slots.default?.()}
-          </>
+          (slots.icon?.() ?? slots.default?.())
         )
       ) : (
-        slots.default?.()
+        <>
+          {loading.value || slots.icon ? renderIconSlot() : null}
+          {slots.default?.()}
+        </>
       )}
     </Tag>
   );

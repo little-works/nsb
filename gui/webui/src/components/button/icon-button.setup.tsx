@@ -28,7 +28,7 @@ export default __render<IconButtonProps & ButtonProps & ButtonHTMLAttributes>(
       size="sm"
       variant="ghost"
       v-slots={{
-        default: () => (
+        icon: () => (
           <Icon class={['text-lg', props.iconClass]}>{slots.default?.()}</Icon>
         ),
         loading: () => (
