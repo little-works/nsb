@@ -1,6 +1,5 @@
 import {
   fetchAutoLaunchEnabled,
-  fetchSettings,
   fetchKernelVersion,
   fetchLatestKernelRelease,
   saveSettings,
@@ -11,7 +10,7 @@ import { useClientQuery } from '@/hooks/use-client-query';
 import { useRuntimeSettings, useRuntimeStatus } from '@/store/app';
 import type { RuntimeSettings } from '@/types';
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { i18n } from '@/i18n';
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -39,44 +38,58 @@ export const useSettingsStore = defineStore('settings', () => {
     initialSystemProxyEnabled.value = systemProxyEnabled.value;
   }
 
-  const settingsQuery = useClientQuery({
-    queryKey: ['settings', 'form'],
+  watch(
+    runtimeSettings.data,
+    (settings) => {
+      if (settings) {
+        syncFormWithSettings(settings);
+      }
+    },
+    { immediate: true },
+  );
+
+  watch(runtimeSettings.error, (error) => {
+    if (!error) {
+      return;
+    }
+
+    toast.error({
+      content:
+        error instanceof Error
+          ? error.message
+          : i18n.global.t('errors.loadSettings'),
+      title: i18n.global.t('errors.loadSettings'),
+    });
+  });
+
+  const kernelInfoQuery = useClientQuery({
+    queryKey: ['kernelInfo'],
     staleTime: 30 * 1000,
     queryFn: async () => {
-      try {
-        const result = await fetchSettings();
-        syncFormWithSettings(result);
-        const [localVersion, release] = await Promise.allSettled([
-          fetchKernelVersion(),
-          fetchLatestKernelRelease(),
-        ]);
-        if (localVersion.status === 'fulfilled') {
-          kernelVersion.value = localVersion.value;
-        } else {
-          kernelVersion.value = '--';
-        }
-        if (release.status === 'fulfilled') {
-          latestKernelVersion.value = release.value.version;
-        } else {
-          toast.error({
-            content:
-              release.reason instanceof Error
-                ? release.reason.message
-                : i18n.global.t('errors.kernelDownload'),
-            title: i18n.global.t('errors.kernelAction'),
-          });
-        }
-        return result;
-      } catch (error) {
+      const [localVersion, release] = await Promise.allSettled([
+        fetchKernelVersion(),
+        fetchLatestKernelRelease(),
+      ]);
+      if (localVersion.status === 'fulfilled') {
+        kernelVersion.value = localVersion.value;
+      } else {
+        kernelVersion.value = '--';
+      }
+      if (release.status === 'fulfilled') {
+        latestKernelVersion.value = release.value.version;
+      } else {
         toast.error({
           content:
-            error instanceof Error
-              ? error.message
-              : i18n.global.t('errors.loadSettings'),
-          title: i18n.global.t('errors.loadSettings'),
+            release.reason instanceof Error
+              ? release.reason.message
+              : i18n.global.t('errors.kernelDownload'),
+          title: i18n.global.t('errors.kernelAction'),
         });
-        throw error;
       }
+      return {
+        kernelVersion: kernelVersion.value,
+        latestKernelVersion: latestKernelVersion.value,
+      };
     },
   });
 
@@ -118,7 +131,9 @@ export const useSettingsStore = defineStore('settings', () => {
     },
   });
 
-  const loading = computed(() => settingsQuery.isFetching.value);
+  const loading = computed(
+    () => runtimeSettings.isFetching.value || kernelInfoQuery.isFetching.value,
+  );
   const autoLaunchEnabled = computed(() => autoLaunchQuery.data.value ?? false);
   const autoLaunchLoading = computed(
     () =>
@@ -127,7 +142,8 @@ export const useSettingsStore = defineStore('settings', () => {
   );
 
   function loadSettings() {
-    void settingsQuery.refetch();
+    void runtimeSettings.refetch();
+    void kernelInfoQuery.refetch();
     void autoLaunchQuery.refetch();
   }
 

@@ -11,8 +11,10 @@ import { toast } from '@/components/toast';
 import ProfileDialog from '@/pages/profiles/profile-dialog.setup';
 import { PROFILE_EDIT_SECTION_IDS } from '@/pages/profiles/profile-edit-sections';
 import { createDefaultProfileRemoteKeepFields } from '@/pages/profiles/profile-keep-fields';
-import { useProfiles, useRuntimeStatus, useTemplates } from '@/store/app';
+import { useTemplates } from '@/store/app';
 import { useClientQuery } from '@/hooks/use-client-query';
+import { useMountedOrActivated } from '@/hooks/use-mounted-or-activated';
+import { useUnmountedOrDeactivated } from '@/hooks/use-unmounted-or-deactivated';
 import { useFloatingDockStore } from '@/store/floating-dock';
 import type { ProfileRemote } from '@/types';
 import {
@@ -21,15 +23,7 @@ import {
   LinkOutlined,
   ScheduleOutlined,
 } from '@vicons/material';
-import {
-  computed,
-  onActivated,
-  onBeforeUnmount,
-  onDeactivated,
-  onMounted,
-  ref,
-  watch,
-} from 'vue';
+import { computed, ref, watch } from 'vue';
 import { usePageContext } from 'vike-vue/usePageContext';
 import { navigate } from 'vike/client/router';
 import { i18n } from '@/i18n';
@@ -64,9 +58,7 @@ function createEmptyRemote(): ProfileRemote {
   };
 }
 
-const profilesQuery = useProfiles();
 const templatesQuery = useTemplates();
-const runtimeStatus = useRuntimeStatus();
 const floatingDockStore = useFloatingDockStore();
 const pageContext = usePageContext();
 const profileId = computed(() =>
@@ -88,6 +80,7 @@ const profileQuery = useClientQuery(
   computed(() => ({
     queryKey: ['profile', profileId.value],
     enabled: Boolean(profileId.value),
+    gcTime: 0,
     queryFn: async () => {
       const id = profileId.value;
       if (!id) throw new Error(i18n.global.t('profiles.noneSelected'));
@@ -120,20 +113,24 @@ watch(
   { immediate: true },
 );
 
-watch(profile, (value) => {
-  if (!value || formDirty.value) return;
-  name.value = value.name;
-  templateId.value = value.template_id;
-  inlineTemplate.value = value.inline_template ?? null;
-  remotes.value = value.remotes.map((remote) => ({
-    ...remote,
-    headers: [...remote.headers],
-    keep: { ...remote.keep },
-  }));
-  hook.value = value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
-  interval.value = value.update_interval_hours?.toString() ?? '';
-  cron.value = value.update_cron ?? '';
-});
+watch(
+  profile,
+  (value) => {
+    if (!value || formDirty.value) return;
+    name.value = value.name;
+    templateId.value = value.template_id;
+    inlineTemplate.value = value.inline_template ?? null;
+    remotes.value = value.remotes.map((remote) => ({
+      ...remote,
+      headers: [...remote.headers],
+      keep: { ...remote.keep },
+    }));
+    hook.value = value.hook || EMPTY_PROFILE_HOOK_TEMPLATE;
+    interval.value = value.update_interval_hours?.toString() ?? '';
+    cron.value = value.update_cron ?? '';
+  },
+  { immediate: true },
+);
 
 function close() {
   void navigate('/webui/profiles');
@@ -217,18 +214,14 @@ function deactivateProfileEditDock() {
   unregisterDockContent = null;
 }
 
-onMounted(activateProfileEditDock);
-onActivated(activateProfileEditDock);
-onDeactivated(deactivateProfileEditDock);
-onBeforeUnmount(deactivateProfileEditDock);
+useMountedOrActivated(activateProfileEditDock);
+useUnmountedOrDeactivated(deactivateProfileEditDock);
 
 async function submit() {
   if (!templateId.value && !inlineTemplate.value) {
     toast.error({ title: i18n.global.t('profiles.dialog.templateRequired') });
     return;
   }
-  const creatingFirstProfile =
-    !profileId.value && !profilesQuery.data.value?.current_profile_id;
   saving.value = true;
   try {
     const payload = {
@@ -249,13 +242,6 @@ async function submit() {
     };
     if (profileId.value) await updateProfile(profileId.value, payload);
     else await createProfile(payload);
-    const result = await profilesQuery.refetch();
-    if (!result.data) {
-      throw new Error(i18n.global.t('profiles.loadFailed'));
-    }
-    if (creatingFirstProfile) {
-      await runtimeStatus.refetch();
-    }
     close();
   } catch (error) {
     toast.error({

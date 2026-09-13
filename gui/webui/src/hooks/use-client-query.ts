@@ -64,8 +64,7 @@ export function useClientQuery<
   options: ClientQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
   queryClient?: QueryClient,
 ):
-  | UseQueryReturnType<TData, TError>
-  | UseQueryDefinedReturnType<TData, TError> {
+  UseQueryReturnType<TData, TError> | UseQueryDefinedReturnType<TData, TError> {
   const query = useQuery(
     computed(() => {
       const resolvedOptions = unref(options);
@@ -78,18 +77,29 @@ export function useClientQuery<
         };
       }
 
-      return { ...resolvedOptions, refetchOnMount: false };
+      const clientOptions = {
+        refetchOnMount: 'always' as const,
+        ...resolvedOptions,
+      };
+      clientOptions.refetchOnMount ??= 'always';
+      return clientOptions;
     }),
     queryClient,
   );
 
+  let hasMounted = false;
   useMountedOrActivated(() => {
+    if (!hasMounted) {
+      hasMounted = true;
+      return;
+    }
+
     if (query.isFetching.value) return;
 
     const resolvedOptions = unref(options) as QueryOptions;
     if (resolvedOptions.enabled === false) return;
 
-    const refetchOnMount = resolvedOptions.refetchOnMount ?? true;
+    const refetchOnMount = resolvedOptions.refetchOnMount ?? 'always';
     if (
       refetchOnMount === 'always' ||
       (refetchOnMount && query.isStale.value)

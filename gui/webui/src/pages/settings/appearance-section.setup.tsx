@@ -5,7 +5,7 @@ import { Select } from '@/components/select';
 import { toast } from '@/components/toast';
 import { useClientQuery } from '@/hooks/use-client-query';
 import { PaletteOutlined } from '@vicons/material';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { i18n, setLocale, type SupportedLocale } from '@/i18n';
 import { useRuntimeSettings } from '@/store/app';
@@ -35,6 +35,19 @@ const appLanguageUpdateQuery = useClientQuery({
     return result.data;
   },
 });
+
+watch(
+  runtimeSettings.data,
+  (settings) => {
+    if (!settings || appLanguageUpdateQuery.isFetching.value) {
+      return;
+    }
+
+    requestedLocale.value = settings.app_language;
+    setLocale(settings.app_language);
+  },
+  { immediate: true },
+);
 
 function normalizeThemeMode(value: string | null | undefined): ThemeMode {
   return value === 'dark' || value === 'auto' ? value : 'light';
@@ -101,20 +114,6 @@ async function selectLocale(locale: SupportedLocale) {
 onMounted(() => {
   themeMode.value = readThemeModeFromCookie();
   applyThemeMode(themeMode.value);
-  const initialLocale = requestedLocale.value;
-  void runtimeSettings.refetch().then((result) => {
-    if (
-      requestedLocale.value !== initialLocale ||
-      appLanguageUpdateQuery.isFetching.value ||
-      !result.data
-    ) {
-      return;
-    }
-
-    const appLanguage = result.data.app_language;
-    requestedLocale.value = appLanguage;
-    setLocale(appLanguage);
-  });
 });
 
 const themeOptions = [
