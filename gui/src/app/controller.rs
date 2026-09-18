@@ -17,6 +17,28 @@ const PROFILE_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_VERSION"),
 );
 
+fn unique_name(
+    value: &str,
+    fallback: &str,
+    existing: &std::collections::HashSet<String>,
+) -> String {
+    let base = match value.trim() {
+        "" => fallback,
+        name => name,
+    };
+    if !existing.contains(base) {
+        return base.to_string();
+    }
+    let mut suffix = 2_u32;
+    loop {
+        let candidate = format!("{base} {suffix}");
+        if !existing.contains(&candidate) {
+            return candidate;
+        }
+        suffix = suffix.saturating_add(1);
+    }
+}
+
 pub struct AppController {
     pub state: AppState,
     kernel_started_by_this_instance: bool,
@@ -28,6 +50,30 @@ impl AppController {
             state: AppState::load(gui_config),
             kernel_started_by_this_instance: false,
         }
+    }
+
+    pub fn normalize_unique_names(&mut self) -> bool {
+        let mut changed = false;
+        let mut template_names = std::collections::HashSet::new();
+        for template in &mut self.state.gui_config.templates {
+            let name = unique_name(&template.name, "Template", &template_names);
+            template_names.insert(name.clone());
+            if template.name != name {
+                template.name = name;
+                changed = true;
+            }
+        }
+
+        let mut profile_names = std::collections::HashSet::new();
+        for profile in &mut self.state.gui_config.profiles {
+            let name = unique_name(&profile.name, "Profile", &profile_names);
+            profile_names.insert(name.clone());
+            if profile.name != name {
+                profile.name = name;
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub async fn bootstrap_runtime(
@@ -157,6 +203,15 @@ impl AppController {
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         let name = Self::validate_profile_name(name)?;
+        if self
+            .state
+            .gui_config
+            .profiles
+            .iter()
+            .any(|profile| profile.name == name)
+        {
+            return Err(String::from("Profile name must be unique."));
+        }
         let id = self.next_profile_id();
         Self::validate_schedule(update_interval_hours, update_cron.as_deref())?;
         let next_update_at = Self::next_update_at(update_interval_hours, update_cron.as_deref());
@@ -204,6 +259,16 @@ impl AppController {
             .iter()
             .position(|profile| profile.id == id)
             .ok_or_else(|| String::from("Profile to update was not found."))?;
+        if self
+            .state
+            .gui_config
+            .profiles
+            .iter()
+            .enumerate()
+            .any(|(index, profile)| index != existing_index && profile.name == name)
+        {
+            return Err(String::from("Profile name must be unique."));
+        }
 
         Self::validate_schedule(update_interval_hours, update_cron.as_deref())?;
         let target = &mut self.state.gui_config.profiles[existing_index];

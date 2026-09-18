@@ -2,9 +2,8 @@
 import type { ProfileRemote } from './ProfileRemote';
 
 export type PortableProfile = {
-  id: string;
   name: string;
-  template_id: string;
+  template_name: string | null;
   inline_template: string | null;
   remotes: Array<ProfileRemote>;
   hook: string | null;

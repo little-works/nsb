@@ -109,6 +109,19 @@ pub async fn create_template(
         Err(error) => return Json(ApiResponse::failure(error, None)),
     };
     let mut guard = ctx.runtime.lock().await;
+    if guard
+        .controller
+        .state
+        .gui_config
+        .templates
+        .iter()
+        .any(|template| template.name == name)
+    {
+        return Json(ApiResponse::failure(
+            String::from("Template name must be unique."),
+            None,
+        ));
+    }
     let item = ProfileTemplate {
         id: generate_profile_id(),
         name,
@@ -157,6 +170,20 @@ pub async fn update_template(
             None,
         ));
     };
+    if guard
+        .controller
+        .state
+        .gui_config
+        .templates
+        .iter()
+        .enumerate()
+        .any(|(item_index, template)| item_index != index && template.name == name)
+    {
+        return Json(ApiResponse::failure(
+            String::from("Template name must be unique."),
+            None,
+        ));
+    }
     let item = &mut guard.controller.state.gui_config.templates[index];
     item.name = name;
     item.content = content;

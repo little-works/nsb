@@ -272,7 +272,7 @@ export default __render<DataManagementSectionProps>(() => {
               <div class="max-h-64 space-y-2 overflow-y-auto rounded border border-outline-variant p-2">
                 {report.value.issues.map((issue, index) => (
                   <div
-                    key={`${issue.entity}-${issue.id ?? index}-${index}`}
+                    key={`${issue.entity}-${issue.name ?? index}-${index}`}
                     class={[
                       'rounded px-3 py-2',
                       'bg-surface-container-low text-xs text-on-surface',
@@ -286,7 +286,7 @@ export default __render<DataManagementSectionProps>(() => {
                       {issue.entity === 'template'
                         ? t('settings.dataTemplate')
                         : t('settings.dataProfile')}{' '}
-                      {issue.name || issue.id || ''}
+                      {issue.name || ''}
                     </p>
                     <p class="mt-1 leading-5 text-on-surface-variant">
                       {issue.reason}

@@ -136,10 +136,11 @@ impl GuiRuntime {
             .await?
             .unwrap_or_else(AppConfig::default);
         let mut controller = AppController::new(app_config);
+        let normalized_names = controller.normalize_unique_names();
         controller
             .bootstrap_runtime(&mut singbox_host, &profile_host)
             .await;
-        if !app_config_store.exists().await? {
+        if normalized_names || !app_config_store.exists().await? {
             app_config_store.save(&controller.state.gui_config).await?;
         }
 

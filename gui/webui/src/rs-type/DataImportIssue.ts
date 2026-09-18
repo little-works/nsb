@@ -5,7 +5,6 @@ import type { DataImportIssueLevel } from './DataImportIssueLevel';
 export type DataImportIssue = {
   level: DataImportIssueLevel;
   entity: DataImportEntityKind;
-  id: string | null;
   name: string | null;
   reason: string;
 };

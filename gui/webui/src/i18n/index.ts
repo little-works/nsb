@@ -150,7 +150,7 @@ const enUS = {
     dataManagement: 'Data Management',
     dataTemplatesProfiles: 'Templates and Profiles',
     dataDescription:
-      'Export all Templates and Profiles, or merge them from an NSB backup by ID.',
+      'Export all Templates and Profiles, or merge them from an NSB backup by name.',
     dataSensitiveWarning:
       'Exports include remote URLs, request headers, and custom hooks. Store backup files securely.',
     dataImport: 'Import JSON',
@@ -549,7 +549,7 @@ const zhCN = {
     download: '下载',
     dataManagement: '数据管理',
     dataTemplatesProfiles: '模板与配置',
-    dataDescription: '导出全部模板与配置，或按 ID 合并 NSB 备份中的数据。',
+    dataDescription: '导出全部模板与配置，或按名称合并 NSB 备份中的数据。',
     dataSensitiveWarning:
       '导出文件包含远程地址、请求头和自定义 Hook，请妥善保管备份文件。',
     dataImport: '导入 JSON',

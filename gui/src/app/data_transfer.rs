@@ -10,15 +10,15 @@ use ts_rs::TS;
 use crate::config::AppConfig;
 use crate::state::{
     ProfileHeader, ProfileItem, ProfileRemote, ProfileTemplate, current_timestamp,
+    generate_profile_id,
 };
 
 pub const PORTABLE_DATA_FORMAT: &str = "nsb-portable-data";
-pub const PORTABLE_DATA_VERSION: u32 = 1;
+pub const PORTABLE_DATA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PortableTemplate {
-    pub id: String,
     pub name: String,
     pub content: String,
 }
@@ -26,9 +26,8 @@ pub struct PortableTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PortableProfile {
-    pub id: String,
     pub name: String,
-    pub template_id: String,
+    pub template_name: Option<String>,
     pub inline_template: Option<String>,
     pub remotes: Vec<ProfileRemote>,
     pub hook: Option<String>,
@@ -66,7 +65,6 @@ pub enum DataImportEntityKind {
 pub struct DataImportIssue {
     pub level: DataImportIssueLevel,
     pub entity: DataImportEntityKind,
-    pub id: Option<String>,
     pub name: Option<String>,
     pub reason: String,
 }
@@ -120,7 +118,6 @@ pub fn export_archive(config: &AppConfig) -> PortableDataArchive {
             .templates
             .iter()
             .map(|item| PortableTemplate {
-                id: item.id.clone(),
                 name: item.name.clone(),
                 content: item.content.clone(),
             })
@@ -129,9 +126,12 @@ pub fn export_archive(config: &AppConfig) -> PortableDataArchive {
             .profiles
             .iter()
             .map(|item| PortableProfile {
-                id: item.id.clone(),
                 name: item.name.clone(),
-                template_id: item.template_id.clone(),
+                template_name: config
+                    .templates
+                    .iter()
+                    .find(|template| template.id == item.template_id)
+                    .map(|template| template.name.clone()),
                 inline_template: item.inline_template.clone(),
                 remotes: item.remotes.clone(),
                 hook: item.hook.clone(),
@@ -165,18 +165,21 @@ pub fn plan_import(content: &str, current: &AppConfig) -> Result<DataImportPlan,
     let now = current_timestamp();
 
     for template in templates {
+        let existing_index = config
+            .templates
+            .iter()
+            .position(|existing| existing.name == template.name);
+        let id = existing_index
+            .map(|index| config.templates[index].id.clone())
+            .unwrap_or_else(|| next_template_id(&config));
         let item = ProfileTemplate {
-            id: template.id.clone(),
+            id,
             name: template.name,
             content: template.content,
             updated_at: now,
             reference_count: 0,
         };
-        if let Some(index) = config
-            .templates
-            .iter()
-            .position(|existing| existing.id == item.id)
-        {
+        if let Some(index) = existing_index {
             config.templates[index] = item;
             report.templates.overwritten += 1;
         } else {
@@ -185,17 +188,20 @@ pub fn plan_import(content: &str, current: &AppConfig) -> Result<DataImportPlan,
         }
     }
 
-    let available_template_ids = config
+    let available_templates = config
         .templates
         .iter()
-        .map(|template| template.id.as_str())
-        .collect::<HashSet<_>>();
+        .map(|template| (template.name.clone(), template.id.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
     let mut imported_profile_ids = Vec::new();
     for profile in profiles {
         let existing_index = config
             .profiles
             .iter()
-            .position(|existing| existing.id == profile.id);
+            .position(|existing| existing.name == profile.name);
+        let id = existing_index
+            .map(|index| config.profiles[index].id.clone())
+            .unwrap_or_else(|| next_profile_id(&config));
         let revision = existing_index
             .map(|index| config.profiles[index].revision.saturating_add(1))
             .unwrap_or(1);
@@ -204,10 +210,26 @@ pub fn plan_import(content: &str, current: &AppConfig) -> Result<DataImportPlan,
             profile.update_cron.as_deref(),
             now,
         );
+        let template_id = match profile.template_name.as_deref() {
+            Some(name) => match available_templates.get(name) {
+                Some(id) => id.clone(),
+                None => {
+                    report.profiles.skipped += 1;
+                    report.issues.push(DataImportIssue {
+                        level: DataImportIssueLevel::Skipped,
+                        entity: DataImportEntityKind::Profile,
+                        name: Some(profile.name),
+                        reason: format!("Referenced Template '{name}' does not exist."),
+                    });
+                    continue;
+                }
+            },
+            None => String::new(),
+        };
         let item = ProfileItem {
-            id: profile.id.clone(),
+            id: id.clone(),
             name: profile.name.clone(),
-            template_id: profile.template_id.clone(),
+            template_id,
             inline_template: profile.inline_template,
             updated_at: now,
             remotes: profile.remotes,
@@ -220,25 +242,11 @@ pub fn plan_import(content: &str, current: &AppConfig) -> Result<DataImportPlan,
             revision,
         };
 
-        if !item.template_id.is_empty()
-            && item.inline_template.is_none()
-            && !available_template_ids.contains(item.template_id.as_str())
-        {
-            report.profiles.warnings += 1;
-            report.issues.push(DataImportIssue {
-                level: DataImportIssueLevel::Warning,
-                entity: DataImportEntityKind::Profile,
-                id: Some(item.id.clone()),
-                name: Some(item.name.clone()),
-                reason: format!("Referenced Template '{}' does not exist.", item.template_id),
-            });
-        }
         if current.current_profile_id.as_deref() == Some(item.id.as_str()) {
             report.profiles.warnings += 1;
             report.issues.push(DataImportIssue {
                 level: DataImportIssueLevel::Warning,
                 entity: DataImportEntityKind::Profile,
-                id: Some(item.id.clone()),
                 name: Some(item.name.clone()),
                 reason: String::from(
                     "This is the current Profile. Refresh it manually to apply the imported definition.",
@@ -253,7 +261,7 @@ pub fn plan_import(content: &str, current: &AppConfig) -> Result<DataImportPlan,
             config.profiles.push(item);
             report.profiles.added += 1;
         }
-        imported_profile_ids.push(profile.id);
+        imported_profile_ids.push(id);
     }
 
     Ok(DataImportPlan {
@@ -272,7 +280,6 @@ fn parse_templates(values: Vec<Value>, report: &mut DataImportReport) -> Vec<Por
         |value| {
             let mut item: PortableTemplate = serde_json::from_value(value)
                 .map_err(|error| format!("Invalid Template record: {error}"))?;
-            validate_id(&item.id)?;
             item.name = item.name.trim().to_string();
             if item.name.is_empty() {
                 return Err(String::from("Template name cannot be empty."));
@@ -300,7 +307,6 @@ fn parse_profiles(values: Vec<Value>, report: &mut DataImportReport) -> Vec<Port
         |value| {
             let mut item: PortableProfile = serde_json::from_value(value)
                 .map_err(|error| format!("Invalid Profile record: {error}"))?;
-            validate_id(&item.id)?;
             item.name = item.name.trim().to_string();
             if item.name.is_empty() {
                 return Err(String::from("Profile name cannot be empty."));
@@ -311,20 +317,23 @@ fn parse_profiles(values: Vec<Value>, report: &mut DataImportReport) -> Vec<Port
             }
             validate_remote_names(&item.remotes)?;
 
-            item.template_id = item.template_id.trim().to_string();
+            item.template_name = item
+                .template_name
+                .map(|name| name.trim().to_string())
+                .filter(|name| !name.is_empty());
             item.inline_template = item
                 .inline_template
                 .map(|content| content.trim().to_string())
                 .filter(|content| !content.is_empty());
-            match (item.template_id.is_empty(), item.inline_template.as_deref()) {
-                (true, Some(content)) => {
+            match (item.template_name.as_deref(), item.inline_template.as_deref()) {
+                (None, Some(content)) => {
                     serde_json::from_str::<nsb_core::SingBoxConfig>(content).map_err(|error| {
                         format!("Inline Template is not valid sing-box JSON: {error}")
                     })?;
                 }
-                (false, None) => {}
-                (true, None) => return Err(String::from("A Template is required.")),
-                (false, Some(_)) => {
+                (Some(_), None) => {}
+                (None, None) => return Err(String::from("A Template is required.")),
+                (Some(_), Some(_)) => {
                     return Err(String::from(
                         "Choose either an inline Template or a shared Template.",
                     ));
@@ -349,24 +358,24 @@ fn parse_last_wins<T>(
     let mut seen = HashSet::new();
     let mut selected = Vec::new();
     for value in values.into_iter().rev() {
-        let id = value
-            .get("id")
+        let name = value
+            .get("name")
             .and_then(Value::as_str)
+            .map(str::trim)
             .map(ToOwned::to_owned);
-        if id.as_ref().is_some_and(|id| !seen.insert(id.clone())) {
+        if name
+            .as_ref()
+            .is_some_and(|name| !seen.insert(name.clone()))
+        {
             continue;
         }
-        selected.push((id, value));
+        selected.push((name, value));
     }
     selected.reverse();
 
     selected
         .into_iter()
-        .filter_map(|(id, value)| {
-            let name = value
-                .get("name")
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned);
+        .filter_map(|(name, value)| {
             match validate(value) {
                 Ok(item) => Some(item),
                 Err(reason) => {
@@ -374,7 +383,6 @@ fn parse_last_wins<T>(
                     issues.push(DataImportIssue {
                         level: DataImportIssueLevel::Skipped,
                         entity,
-                        id,
                         name,
                         reason,
                     });
@@ -385,17 +393,22 @@ fn parse_last_wins<T>(
         .collect()
 }
 
-fn validate_id(id: &str) -> Result<(), String> {
-    if id.is_empty()
-        || id.trim() != id
-        || matches!(id, "." | "..")
-        || id.chars().any(|character| {
-            character.is_control() || matches!(character, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*')
-        })
-    {
-        return Err(String::from("ID is empty or contains path-unsafe characters."));
+fn next_template_id(config: &AppConfig) -> String {
+    loop {
+        let id = generate_profile_id();
+        if !config.templates.iter().any(|item| item.id == id) {
+            return id;
+        }
     }
-    Ok(())
+}
+
+fn next_profile_id(config: &AppConfig) -> String {
+    loop {
+        let id = generate_profile_id();
+        if !config.profiles.iter().any(|item| item.id == id) {
+            return id;
+        }
+    }
 }
 
 fn validate_schedule(interval: Option<u32>, cron_expression: Option<&str>) -> Result<(), String> {
@@ -505,8 +518,9 @@ mod tests {
         config.current_profile_id = Some(String::from("profile-one"));
 
         let value = serde_json::to_value(export_archive(&config)).expect("archive serializes");
-        assert_eq!(value["templates"][0]["id"], "template-one");
-        assert_eq!(value["profiles"][0]["id"], "profile-one");
+        assert!(value["templates"][0].get("id").is_none());
+        assert!(value["profiles"][0].get("id").is_none());
+        assert_eq!(value["profiles"][0]["template_name"], "Default");
         assert!(value["profiles"][0]["hook"].as_str().is_some());
         for field in [
             "current_profile_id",
@@ -522,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn last_invalid_duplicate_skips_id_and_keeps_local_item() {
+    fn last_invalid_duplicate_name_keeps_local_item() {
         let mut config = AppConfig::default();
         config.templates.push(ProfileTemplate {
             id: String::from("template-one"),
@@ -535,8 +549,8 @@ mod tests {
             "format": PORTABLE_DATA_FORMAT,
             "version": PORTABLE_DATA_VERSION,
             "templates": [
-                { "id": "template-one", "name": "Valid earlier", "content": template_content() },
-                { "id": "template-one", "name": "", "content": template_content() }
+                { "name": "Local", "content": template_content() },
+                { "name": "Local", "content": "invalid" }
             ],
             "profiles": []
         })
@@ -549,18 +563,26 @@ mod tests {
     }
 
     #[test]
-    fn overwrite_rebuilds_metadata_preserves_selection_and_warns_for_missing_template() {
+    fn overwrite_by_name_keeps_id_rebuilds_metadata_and_preserves_selection() {
         let mut config = AppConfig::default();
-        config.profiles.push(profile("profile-one", "Local", "missing"));
+        config.templates.push(ProfileTemplate {
+            id: String::from("template-one"),
+            name: String::from("Default"),
+            content: template_content(),
+            updated_at: 1,
+            reference_count: 0,
+        });
+        config
+            .profiles
+            .push(profile("profile-one", "Local", "template-one"));
         config.current_profile_id = Some(String::from("profile-one"));
         let content = json!({
             "format": PORTABLE_DATA_FORMAT,
             "version": PORTABLE_DATA_VERSION,
             "templates": [],
             "profiles": [{
-                "id": "profile-one",
-                "name": "Imported",
-                "template_id": "missing",
+                "name": "Local",
+                "template_name": "Default",
                 "inline_template": null,
                 "remotes": [],
                 "hook": null,
@@ -574,8 +596,9 @@ mod tests {
         let imported = &plan.config.profiles[0];
         assert_eq!(plan.config.current_profile_id.as_deref(), Some("profile-one"));
         assert_eq!(plan.report.profiles.overwritten, 1);
-        assert_eq!(plan.report.profiles.warnings, 2);
-        assert_eq!(imported.name, "Imported");
+        assert_eq!(plan.report.profiles.warnings, 1);
+        assert_eq!(imported.id, "profile-one");
+        assert_eq!(imported.name, "Local");
         assert_eq!(imported.revision, 8);
         assert_eq!(imported.last_attempt_at, 0);
         assert!(imported.last_update_error.is_none());
