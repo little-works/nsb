@@ -1,6 +1,7 @@
 import AppearanceSection from '@/pages/settings/appearance-section.setup';
 import GeneralSection from '@/pages/settings/general-section.setup';
 import KernelInfoSection from '@/pages/settings/kernel-info-section.setup';
+import DataManagementSection from '@/pages/settings/data-management-section.setup';
 import { __render } from '@/shared/helper';
 import { IconButton } from '@/components/button';
 import { Page, PageContent } from '@/components/page-content';
@@ -63,6 +64,7 @@ export default __render<SettingsPageProps>(() => (
             onReload={settingsStore.loadSettings}
           />
           <AppearanceSection />
+          <DataManagementSection />
         </PageContent>
       ),
     }}

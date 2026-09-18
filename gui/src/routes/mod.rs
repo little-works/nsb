@@ -145,6 +145,18 @@ pub fn build_router(
             "/api/settings/auto-launch",
             get(api::settings::get_auto_launch).post(api::settings::update_auto_launch),
         )
+        .route(
+            "/api/settings/data/export",
+            get(api::settings::export_portable_data),
+        )
+        .route(
+            "/api/settings/data/import/preview",
+            post(api::settings::preview_portable_data).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/api/settings/data/import",
+            post(api::settings::import_portable_data).layer(DefaultBodyLimit::disable()),
+        )
         .layer(middleware::from_fn(access_log))
         .with_state(RouteState {
             runtime,

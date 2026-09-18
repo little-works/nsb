@@ -17,6 +17,10 @@ export type { ProfileRemoteKeepFields } from '@/rs-type/ProfileRemoteKeepFields'
 export type { ProfileTemplate } from '@/rs-type/ProfileTemplate';
 export type { ProfileListResponse } from '@/rs-type/ProfileListResponse';
 export type { ProfileSummary } from '@/rs-type/ProfileSummary';
+export type { PortableDataArchive } from '@/rs-type/PortableDataArchive';
+export type { DataImportReport } from '@/rs-type/DataImportReport';
+export type { DataImportIssue } from '@/rs-type/DataImportIssue';
+export type { DataImportEntityStats } from '@/rs-type/DataImportEntityStats';
 
 export const AppPageType = {
   Proxies: 'Proxies',

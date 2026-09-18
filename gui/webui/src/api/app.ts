@@ -10,6 +10,8 @@ import type {
   SaveProfileTemplatePayload,
   SaveSettingsPayload,
   ProfileTemplate,
+  PortableDataArchive,
+  DataImportReport,
 } from '@/types';
 
 const request = new Request();
@@ -171,4 +173,26 @@ export function fetchAutoLaunchEnabled() {
 
 export function updateAutoLaunchEnabled(enabled: boolean) {
   return request.post<boolean>('/api/settings/auto-launch', { enabled });
+}
+
+export function exportPortableData() {
+  return request.get<PortableDataArchive>('/api/settings/data/export');
+}
+
+export function previewPortableData(file: File) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return request.postForm<DataImportReport>(
+    '/api/settings/data/import/preview',
+    formData,
+  );
+}
+
+export function importPortableData(file: File) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  return request.postForm<DataImportReport>(
+    '/api/settings/data/import',
+    formData,
+  );
 }
