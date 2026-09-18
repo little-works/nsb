@@ -13,7 +13,13 @@ import { fileURLToPath } from 'node:url';
 const rootDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appDirectory = resolve(rootDirectory, 'NSB.app');
 const iconsetDirectory = resolve(rootDirectory, 'NSB.iconset');
-const archivePath = resolve(rootDirectory, 'NSB-macos-arm64.zip');
+const architecture = { arm64: 'arm64', x64: 'x64' }[process.arch];
+
+if (!architecture) {
+  throw new Error(`Unsupported macOS architecture: ${process.arch}.`);
+}
+
+const archivePath = resolve(rootDirectory, `NSB-macos-${architecture}.zip`);
 const binaryPath = resolve(rootDirectory, 'target', 'release', 'nsb');
 const iconPath = resolve(rootDirectory, 'gui', 'assets', 'nsb-logo.png');
 

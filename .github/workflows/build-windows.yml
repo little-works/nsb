@@ -1,0 +1,57 @@
+name: Build (Windows)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+          - arch: arm64
+            runner: windows-11-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install WebUI dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WebUI
+        run: pnpm --dir gui/webui run build
+
+      - name: Build Windows GUI
+        run: cargo build -p nsb-gui --release
+
+      - name: Package Windows artifact
+        shell: pwsh
+        run: |
+          $archive = "NSB-windows-${{ matrix.arch }}.zip"
+          $stage = Join-Path $env:RUNNER_TEMP "NSB-windows-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item target/release/nsb.exe $stage
+          Compress-Archive -Path (Join-Path $stage 'nsb.exe') -DestinationPath $archive -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: NSB-windows-${{ matrix.arch }}
+          path: NSB-windows-${{ matrix.arch }}.zip
+          archive: false
+          if-no-files-found: error

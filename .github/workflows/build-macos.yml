@@ -1,17 +1,24 @@
-name: macOS ARM64 Test Build
+name: Build (macOS)
 
 on:
-  # push:
-  #   branches:
-  #     - dev
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  macos-arm64:
-    runs-on: macos-14
+  build:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,18 +36,19 @@ jobs:
       - name: Build WebUI
         run: pnpm --dir gui/webui run build
 
-      - name: Build macOS ARM64 GUI
+      - name: Build macOS GUI
         run: cargo build -p nsb-gui --release
 
       - name: Set up mise
         uses: jdx/mise-action@v3
 
-      - name: Package macOS ARM64 test artifact
+      - name: Package macOS artifact
         run: mise run package-macos-app
 
-      - name: Upload macOS ARM64 test artifact
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
-          path: NSB-macos-arm64.zip
+          name: NSB-macos-${{ matrix.arch }}
+          path: NSB-macos-${{ matrix.arch }}.zip
           archive: false
           if-no-files-found: error
