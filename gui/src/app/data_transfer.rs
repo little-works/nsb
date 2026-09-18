@@ -14,7 +14,7 @@ use crate::state::{
 };
 
 pub const PORTABLE_DATA_FORMAT: &str = "nsb-portable-data";
-pub const PORTABLE_DATA_VERSION: u32 = 2;
+pub const PORTABLE_DATA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
