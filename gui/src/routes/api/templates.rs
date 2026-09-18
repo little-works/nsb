@@ -137,7 +137,7 @@ pub async fn create_template(
         .push(item.clone());
     match guard
         .app_config_store
-        .save(&guard.controller.state.gui_config)
+        .save_portable(&guard.controller.state.gui_config)
         .await
     {
         Ok(()) => Json(ApiResponse::success(
@@ -191,7 +191,7 @@ pub async fn update_template(
     let response = item.clone();
     match guard
         .app_config_store
-        .save(&guard.controller.state.gui_config)
+        .save_portable(&guard.controller.state.gui_config)
         .await
     {
         Ok(()) => Json(ApiResponse::success(
@@ -236,7 +236,7 @@ pub async fn delete_template(
     guard.controller.state.gui_config.templates.remove(index);
     match guard
         .app_config_store
-        .save(&guard.controller.state.gui_config)
+        .save_portable(&guard.controller.state.gui_config)
         .await
     {
         Ok(()) => Json(ApiResponse::success(

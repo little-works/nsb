@@ -301,7 +301,7 @@ pub async fn import_profile(
                 }
                 if let Err(error) = guard
                     .app_config_store
-                    .save(&guard.controller.state.gui_config)
+                    .save_all(&guard.controller.state.gui_config)
                     .await
                 {
                     return Json(ApiResponse::failure(

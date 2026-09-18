@@ -162,7 +162,7 @@ pub async fn import_portable_data(
     if plan.report.actionable_count() == 0 {
         return Json(ApiResponse::success(String::new(), Some(plan.report)));
     }
-    if let Err(error) = guard.app_config_store.save(&plan.config).await {
+    if let Err(error) = guard.app_config_store.save_all(&plan.config).await {
         return Json(ApiResponse::failure(error, None));
     }
 

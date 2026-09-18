@@ -236,7 +236,7 @@ impl AppController {
         };
 
         self.state.gui_config.profiles.push(item);
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_all(&self.state.gui_config).await
     }
 
     pub async fn update_profile(
@@ -281,7 +281,7 @@ impl AppController {
         target.revision = target.revision.saturating_add(1);
 
         self.normalize_current_profile();
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_all(&self.state.gui_config).await
     }
 
     pub async fn delete_profile(
@@ -322,7 +322,7 @@ impl AppController {
         }
 
         self.normalize_current_profile();
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_all(&self.state.gui_config).await
     }
 
     pub async fn configure_profile_sources(
@@ -395,7 +395,7 @@ impl AppController {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
         target.revision = target.revision.saturating_add(1);
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_all(&self.state.gui_config).await
     }
 
     pub async fn read_profile_runtime(
@@ -428,7 +428,7 @@ impl AppController {
         {
             stored_profile.updated_at = current_timestamp();
         }
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_runtime(&self.state.gui_config).await
     }
 
     pub async fn set_current_profile(
@@ -453,7 +453,7 @@ impl AppController {
 
         self.state.gui_config.current_profile_id = Some(id);
         self.normalize_current_profile();
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_runtime(&self.state.gui_config).await
     }
 
     pub async fn activate_profile(
@@ -500,7 +500,7 @@ impl AppController {
         SystemProxyHost::configure(system_proxy_enabled, endpoint.as_deref())?;
         self.state.gui_config.app_port = app_port;
         self.state.gui_config.system_proxy_enabled = system_proxy_enabled;
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_portable(&self.state.gui_config).await
     }
 
     async fn current_mixed_endpoint(
@@ -547,7 +547,7 @@ impl AppController {
         app_config_store: &AppConfigStore,
     ) -> Result<(), String> {
         self.state.gui_config.app_language = app_language;
-        app_config_store.save(&self.state.gui_config).await
+        app_config_store.save_portable(&self.state.gui_config).await
     }
 
     pub async fn auto_start_kernel_if_needed(

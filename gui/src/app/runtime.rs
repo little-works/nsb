@@ -141,7 +141,9 @@ impl GuiRuntime {
             .bootstrap_runtime(&mut singbox_host, &profile_host)
             .await;
         if normalized_names || !app_config_store.exists().await? {
-            app_config_store.save(&controller.state.gui_config).await?;
+            app_config_store
+                .save_portable(&controller.state.gui_config)
+                .await?;
         }
 
         let (kernel_status_tx, _) = broadcast::channel(16);
@@ -470,7 +472,7 @@ pub async fn update_profile_runtime(
             }
             guard
                 .app_config_store
-                .save(&guard.controller.state.gui_config)
+                .save_runtime(&guard.controller.state.gui_config)
                 .await?;
 
             if restart_current_kernel && is_current {
@@ -492,7 +494,7 @@ pub async fn update_profile_runtime(
             }
             guard
                 .app_config_store
-                .save(&guard.controller.state.gui_config)
+                .save_runtime(&guard.controller.state.gui_config)
                 .await?;
             Err(error)
         }
