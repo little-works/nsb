@@ -78,15 +78,21 @@ const restartQuery = useClientQuery({
       queryClient.setQueryData(runtimeQueryKey, snapshot);
       return snapshot;
     } catch (error) {
-      if (
+      const errorMessage =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : undefined;
+      if (errorMessage) {
+        toast.error({
+          title: i18n.global.t('errors.kernelStartFailed'),
+          content: errorMessage,
+        });
+      } else if (
         connectionState.value !== 'connected' ||
         actionStartedFromFailed ||
         failureNotificationVersion.value === failureNotificationVersionAtStart
       ) {
-        toast.error({
-          title: i18n.global.t('errors.kernelStartFailed'),
-          content: i18n.global.t('errors.kernelStartFailedAction'),
-        });
+        toast.error({ title: i18n.global.t('errors.kernelStartFailed') });
       }
       throw error;
     } finally {
