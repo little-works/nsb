@@ -19,8 +19,18 @@ fn snapshot(
     rules: Vec<Value>,
     final_: Option<&str>,
 ) -> RemoteSnapshot {
+    snapshot_named("source", nodes, groups, rules, final_)
+}
+
+fn snapshot_named(
+    name: &str,
+    nodes: Vec<Value>,
+    groups: Vec<Value>,
+    rules: Vec<Value>,
+    final_: Option<&str>,
+) -> RemoteSnapshot {
     RemoteSnapshot {
-        name: String::from("source"),
+        name: String::from(name),
         url: String::from("https://example.test/subscription"),
         proxy_nodes: nodes,
         proxy_groups: groups,
@@ -260,25 +270,27 @@ fn leaves_disabled_singbox_configuration_fragments_empty() {
 }
 
 #[test]
-fn assembles_template_first_and_keeps_route_rule_order() {
+fn assembles_multiple_remotes_into_ordered_selectors_and_keeps_route_rule_order() {
     let template = r#"{"outbounds":[{"type":"direct","tag":"direct"},{"type":"selector","tag":"PROXY","outbounds":["manual"]}],"route":{"final":"direct","rules":[{"tag":"template"}]}}"#;
-    let first = snapshot(
-        vec![json!({"type":"shadowsocks", "tag":"node"})],
-        Vec::new(),
+    let first = snapshot_named(
+        "first",
+        vec![json!({"type":"shadowsocks", "tag":"first:node"})],
+        vec![json!({"type":"selector", "tag":"first:group", "outbounds":["first:node"]})],
         vec![json!({"tag":"remote-first"})],
-        Some("node"),
+        Some("first:node"),
     );
-    let second = snapshot(
+    let second = snapshot_named(
+        "second",
         vec![
-            json!({"type":"trojan", "tag":"node"}),
-            json!({"type":"trojan", "tag":"next"}),
+            json!({"type":"trojan", "tag":"second:node"}),
+            json!({"type":"trojan", "tag":"second:next"}),
         ],
         Vec::new(),
         vec![
             json!({"tag":"remote-second"}),
             json!({"tag":"remote-first"}),
         ],
-        Some("next"),
+        Some("second:next"),
     );
 
     let config: Value =
@@ -296,16 +308,159 @@ fn assembles_template_first_and_keeps_route_rule_order() {
         .filter_map(|rule| rule["tag"].as_str())
         .collect();
 
-    assert_eq!(tags, vec!["direct", "PROXY", "node", "next"]);
+    assert_eq!(
+        tags,
+        vec![
+            "direct",
+            "PROXY",
+            "first:node",
+            "second:node",
+            "second:next",
+            "first:group",
+            "first",
+            "second"
+        ]
+    );
     assert_eq!(
         config["outbounds"][1]["outbounds"],
-        json!(["manual", "node", "next"])
+        json!(["first", "second"])
+    );
+    assert_eq!(
+        config["outbounds"][6],
+        json!({
+            "type": "selector",
+            "tag": "first",
+            "outbounds": ["first:group", "first:node"]
+        })
     );
     assert_eq!(
         rules,
         vec!["template", "remote-first", "remote-second", "remote-first"]
     );
-    assert_eq!(config["route"]["final"], "next");
+    assert_eq!(config["route"]["final"], "second:next");
+}
+
+#[test]
+fn keeps_empty_remote_selectors_without_direct_fallback() {
+    let zero: Value = serde_json::from_str(
+        &build_config(r#"{"outbounds":[]}"#, Vec::new(), None).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        zero["outbounds"],
+        json!([{"type":"selector","tag":"PROXY","outbounds":["direct"]}])
+    );
+
+    let single: Value = serde_json::from_str(
+        &build_config(
+            r#"{"outbounds":[]}"#,
+            vec![snapshot_named(
+                "empty",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                None,
+            )],
+            None,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        single["outbounds"],
+        json!([{"type":"selector","tag":"PROXY","outbounds":[]}])
+    );
+
+    let multiple: Value = serde_json::from_str(
+        &build_config(
+            r#"{"outbounds":[]}"#,
+            vec![
+                snapshot_named("first", Vec::new(), Vec::new(), Vec::new(), None),
+                snapshot_named("second", Vec::new(), Vec::new(), Vec::new(), None),
+            ],
+            None,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        multiple["outbounds"],
+        json!([
+            {"type":"selector","tag":"first","outbounds":[]},
+            {"type":"selector","tag":"second","outbounds":[]},
+            {"type":"selector","tag":"PROXY","outbounds":["first","second"]}
+        ])
+    );
+}
+
+#[test]
+fn preserves_proxy_fields_and_removes_invalid_default_for_multiple_remotes() {
+    let config: Value = serde_json::from_str(
+        &build_config(
+            r#"{
+                "outbounds": [{
+                    "type": "selector",
+                    "tag": "PROXY",
+                    "outbounds": ["old"],
+                    "default": "old",
+                    "interrupt_exist_connections": true
+                }]
+            }"#,
+            vec![
+                snapshot_named("first", Vec::new(), Vec::new(), Vec::new(), None),
+                snapshot_named("second", Vec::new(), Vec::new(), Vec::new(), None),
+            ],
+            None,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        config["outbounds"][2],
+        json!({
+            "type": "selector",
+            "tag": "PROXY",
+            "outbounds": ["first", "second"],
+            "interrupt_exist_connections": true
+        })
+    );
+}
+
+#[test]
+fn rejects_multiple_remote_selector_name_collisions() {
+    let duplicate = build_config(
+        r#"{}"#,
+        vec![
+            snapshot_named("same", Vec::new(), Vec::new(), Vec::new(), None),
+            snapshot_named("same", Vec::new(), Vec::new(), Vec::new(), None),
+        ],
+        None,
+    )
+    .unwrap_err();
+    assert!(duplicate.contains("duplicate name 'same'"));
+
+    let reserved = build_config(
+        r#"{}"#,
+        vec![
+            snapshot_named("direct", Vec::new(), Vec::new(), Vec::new(), None),
+            snapshot_named("other", Vec::new(), Vec::new(), Vec::new(), None),
+        ],
+        None,
+    )
+    .unwrap_err();
+    assert!(reserved.contains("name 'direct' is reserved"));
+
+    let outbound_conflict = build_config(
+        r#"{"outbounds":[{"type":"direct","tag":"same"}]}"#,
+        vec![
+            snapshot_named("same", Vec::new(), Vec::new(), Vec::new(), None),
+            snapshot_named("other", Vec::new(), Vec::new(), Vec::new(), None),
+        ],
+        None,
+    )
+    .unwrap_err();
+    assert!(outbound_conflict.contains("conflicts with an existing outbound tag"));
 }
 
 #[test]
@@ -387,7 +542,7 @@ fn recursively_merges_preserved_fields_in_remote_order_and_appends_arrays() {
         "inbounds": [{"tag": "template"}],
         "experimental": {"cache_file": {"enabled": false, "path": "template.db"}}
     }"#;
-    let mut first = snapshot(Vec::new(), Vec::new(), Vec::new(), None);
+    let mut first = snapshot_named("first", Vec::new(), Vec::new(), Vec::new(), None);
     first.dns = Some(json!({
         "final": "first",
         "servers": [{"tag": "first"}]
@@ -395,7 +550,7 @@ fn recursively_merges_preserved_fields_in_remote_order_and_appends_arrays() {
     first.inbounds = vec![json!({"tag": "first"})];
     first.route = Some(json!({"rule_set": [{"tag": "first"}]}));
     first.experimental = Some(json!({"cache_file": {"enabled": true}}));
-    let mut second = snapshot(Vec::new(), Vec::new(), Vec::new(), None);
+    let mut second = snapshot_named("second", Vec::new(), Vec::new(), Vec::new(), None);
     second.dns = Some(json!({
         "final": "second",
         "servers": [{"tag": "second"}]

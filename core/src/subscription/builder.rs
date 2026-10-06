@@ -30,6 +30,12 @@ pub fn build_config(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let remote_selectors = if multi {
+        validate_remote_selectors(&outbounds, &remotes)?;
+        remotes.iter().map(remote_selector).collect()
+    } else {
+        Vec::new()
+    };
     let mut source_groups = Vec::new();
     let mut source_nodes = Vec::new();
     for remote in &mut remotes {
@@ -54,14 +60,29 @@ pub fn build_config(
         .collect();
     outbounds.append(&mut source_nodes);
     outbounds.append(&mut source_groups);
-    let mut members = group_tags;
-    members.extend(node_tags);
-    if members.is_empty() {
-        members.push(String::from("direct"));
-    }
-    match outbounds.iter_mut().find(|item| tag(item) == Some("PROXY")) {
-        Some(proxy) => append_proxy_members(proxy, &members)?,
-        None => outbounds.push(json!({"type":"selector","tag":"PROXY","outbounds":members})),
+    if multi {
+        outbounds.extend(remote_selectors);
+        let members: Vec<String> = remotes.iter().map(|remote| remote.name.clone()).collect();
+        match outbounds.iter_mut().find(|item| tag(item) == Some("PROXY")) {
+            Some(proxy) => replace_proxy_members(proxy, &members)?,
+            None => {
+                outbounds.push(json!({
+                    "type": "selector",
+                    "tag": "PROXY",
+                    "outbounds": members,
+                }));
+            }
+        }
+    } else {
+        let mut members = group_tags;
+        members.extend(node_tags);
+        if remotes.is_empty() && members.is_empty() {
+            members.push(String::from("direct"));
+        }
+        match outbounds.iter_mut().find(|item| tag(item) == Some("PROXY")) {
+            Some(proxy) => append_proxy_members(proxy, &members)?,
+            None => outbounds.push(json!({"type":"selector","tag":"PROXY","outbounds":members})),
+        }
     }
     dedupe_outbounds(&mut outbounds);
     config["outbounds"] = Value::Array(outbounds);
@@ -80,6 +101,74 @@ pub fn build_config(
     }
     serde_json::to_string_pretty(&config)
         .map_err(|error| format!("Failed to serialize generated configuration: {error}"))
+}
+
+fn validate_remote_selectors(
+    template_outbounds: &[Value],
+    remotes: &[RemoteSnapshot],
+) -> Result<(), String> {
+    let mut outbound_tags = HashSet::new();
+    for outbound in template_outbounds.iter().chain(
+        remotes
+            .iter()
+            .flat_map(|remote| remote.proxy_nodes.iter().chain(&remote.proxy_groups)),
+    ) {
+        if let Some(outbound_tag) = tag(outbound) {
+            outbound_tags.insert(outbound_tag.to_owned());
+        }
+    }
+
+    let mut remote_names = HashSet::new();
+    for remote in remotes {
+        if matches!(remote.name.as_str(), "PROXY" | "direct" | "block") {
+            return Err(format!(
+                "Remote name '{}' is reserved and cannot be used for a generated selector.",
+                remote.name
+            ));
+        }
+        if !remote_names.insert(remote.name.clone()) {
+            return Err(format!(
+                "Remote names must be unique; duplicate name '{}'.",
+                remote.name
+            ));
+        }
+        if outbound_tags.contains(&remote.name) {
+            return Err(format!(
+                "Generated selector tag '{}' conflicts with an existing outbound tag.",
+                remote.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn remote_selector(remote: &RemoteSnapshot) -> Value {
+    let mut members = Vec::new();
+    append_unique_tags(
+        &mut members,
+        remote.proxy_groups.iter().filter_map(tag),
+    );
+    append_unique_tags(
+        &mut members,
+        remote
+            .proxy_nodes
+            .iter()
+            .filter(|outbound| !is_builtin_outbound(outbound))
+            .filter_map(tag),
+    );
+    json!({
+        "type": "selector",
+        "tag": remote.name.clone(),
+        "outbounds": members,
+    })
+}
+
+fn append_unique_tags<'a>(members: &mut Vec<String>, tags: impl Iterator<Item = &'a str>) {
+    for tag in tags {
+        if !members.iter().any(|member| member == tag) {
+            members.push(tag.to_owned());
+        }
+    }
 }
 
 fn merge_preserved_fields(config: &mut Value, remote: &mut RemoteSnapshot) {
@@ -135,6 +224,31 @@ fn append_proxy_members(proxy: &mut Value, members: &[String]) -> Result<(), Str
     }
     Ok(())
 }
+
+fn replace_proxy_members(proxy: &mut Value, members: &[String]) -> Result<(), String> {
+    let object = proxy
+        .as_object_mut()
+        .ok_or_else(|| String::from("Template PROXY outbound must be an object."))?;
+    {
+        let outbounds = object
+            .get_mut("outbounds")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| {
+                String::from("Template PROXY outbound must contain an outbounds array.")
+            })?;
+        outbounds.clear();
+        outbounds.extend(members.iter().cloned().map(Value::String));
+    }
+    let keep_default = object
+        .get("default")
+        .and_then(Value::as_str)
+        .is_some_and(|default| members.iter().any(|member| member == default));
+    if !keep_default {
+        object.remove("default");
+    }
+    Ok(())
+}
+
 fn dedupe_outbounds(outbounds: &mut Vec<Value>) {
     let mut seen_tags = HashSet::new();
     let mut untagged = Vec::new();
