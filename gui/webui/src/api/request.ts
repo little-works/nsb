@@ -1,6 +1,11 @@
 import type { ApiResponse } from '@/types';
+import { toast } from '@/components/toast';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export type RequestCallOptions = {
+  suppressInfoMessage?: boolean;
+};
 
 type RequestOptions = {
   base?: string;
@@ -24,7 +29,10 @@ export class Request {
 
   private async request<T>(
     url: string,
-    options: { method: Method; body?: Record<string, unknown> | FormData },
+    options: {
+      method: Method;
+      body?: Record<string, unknown> | FormData;
+    } & RequestCallOptions,
   ) {
     this.beforeRequest();
 
@@ -69,33 +77,57 @@ export class Request {
       return null as T;
     }
     const payload = (await response.json()) as ApiResponse<T>;
-    if (!payload.ok || payload.data == null) {
+    if (!payload.ok) {
       throw new Error(payload.message || 'Request failed');
     }
-    return payload.data;
+
+    if (
+      payload.message &&
+      !(
+        options.suppressInfoMessage &&
+        (payload.message_level === undefined ||
+          payload.message_level === 'info')
+      )
+    ) {
+      switch (payload.message_level) {
+        case 'warn':
+          toast.warn({ title: payload.message });
+          break;
+        case 'error':
+          toast.error({ title: payload.message });
+          break;
+        default:
+          toast.info({ title: payload.message });
+          break;
+      }
+    }
+
+    // Keep existing non-null wrapper contracts; no-data operations discard this
+    // value at their API boundary.
+    return payload.data as T;
   }
 
-  get<T>(url: string, body?: any) {
-    return this.request<T>(url, { method: 'GET', body });
+  get<T>(url: string, body?: any, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'GET', body, ...options });
   }
 
-  post<T>(url: string, body?: any) {
-    return this.request<T>(url, { method: 'POST', body });
+  post<T>(url: string, body?: any, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'POST', body, ...options });
   }
 
-  put<T>(url: string, body?: any) {
-    return this.request<T>(url, { method: 'PUT', body });
+  put<T>(url: string, body?: any, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'PUT', body, ...options });
   }
 
-  patch<T>(url: string, body?: any) {
-    return this.request<T>(url, { method: 'PATCH', body });
+  patch<T>(url: string, body?: any, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'PATCH', body, ...options });
   }
 
-  delete<T>(url: string) {
-    return this.request<T>(url, { method: 'DELETE' });
+  delete<T>(url: string, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'DELETE', ...options });
   }
 
-  postForm<T>(url: string, body: FormData) {
-    return this.request<T>(url, { method: 'POST', body });
+  postForm<T>(url: string, body: FormData, options?: RequestCallOptions) {
+    return this.request<T>(url, { method: 'POST', body, ...options });
   }
 }

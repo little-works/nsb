@@ -53,9 +53,12 @@ export interface RuntimeSettings {
   app_language: AppLanguage;
 }
 
+export type ApiMessageLevel = 'info' | 'warn' | 'error';
+
 export interface ApiResponse<T> {
   ok: boolean;
   message: string;
+  message_level?: ApiMessageLevel;
   data: T | null;
 }
 

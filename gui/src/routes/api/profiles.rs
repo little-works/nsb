@@ -7,7 +7,7 @@ use crate::app::update_profile_runtime;
 use crate::routes::RouteState;
 use crate::state::{ProfileItem, ProfileRemote};
 
-use super::ApiResponse;
+use super::{ApiMessageLevel, ApiResponse};
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -409,18 +409,22 @@ pub async fn create_profile(
     };
 
     let mut message = String::from("Profile added.");
+    let mut message_level = None;
     if should_select_after_download {
         match update_profile_runtime(ctx.runtime.clone(), created.id.clone(), false).await {
             Ok(()) => {
                 let mut guard = ctx.runtime.lock().await;
                 if let Err(err) = guard.activate_profile(created.id.clone()).await {
-                    return Json(ApiResponse::failure(
-                        err,
-                        Some(profile_list_response(&guard)),
-                    ));
+                    // Profile creation is already committed; automatic activation is
+                    // best-effort and must not turn a successful save into a failure.
+                    message = format!("Profile added, but automatic activation failed: {err}");
+                    message_level = Some(ApiMessageLevel::Warn);
                 }
             }
-            Err(err) => message = format!("Profile added, but initial download failed: {err}"),
+            Err(err) => {
+                message = format!("Profile added, but initial download failed: {err}");
+                message_level = Some(ApiMessageLevel::Warn);
+            }
         }
     } else {
         let runtime = ctx.runtime.clone();
@@ -431,10 +435,12 @@ pub async fn create_profile(
     }
 
     let guard = ctx.runtime.lock().await;
-    Json(ApiResponse::success(
-        message,
-        Some(profile_list_response(&guard)),
-    ))
+    let data = Some(profile_list_response(&guard));
+    let response = match message_level {
+        Some(level) => ApiResponse::success_with_level(message, data, level),
+        None => ApiResponse::success(message, data),
+    };
+    Json(response)
 }
 
 pub async fn update_profile(

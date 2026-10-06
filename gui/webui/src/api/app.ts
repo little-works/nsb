@@ -67,7 +67,9 @@ export function fetchKernelDownloadProgress() {
 export async function importKernelBinary(file: File) {
   const formData = new FormData();
   formData.append('file', file, file.name);
-  await request.postForm<string>('/api/kernel/import', formData);
+  await request.postForm<void>('/api/kernel/import', formData, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function listProfiles() {
@@ -83,10 +85,14 @@ export function createProfile(payload: Omit<SaveProfilePayload, 'id'>) {
 }
 
 export function importProfile(fileName: string, content: string) {
-  return request.post<ProfileListResponse>('/api/profiles/import', {
-    file_name: fileName,
-    content,
-  });
+  return request.post<ProfileListResponse>(
+    '/api/profiles/import',
+    {
+      file_name: fileName,
+      content,
+    },
+    { suppressInfoMessage: true },
+  );
 }
 
 export function listTemplates() {
@@ -102,18 +108,24 @@ export function getTemplate(id: string) {
 }
 
 export function createTemplate(payload: SaveProfileTemplatePayload) {
-  return request.post<ProfileTemplate>('/api/templates', payload);
+  return request.post<ProfileTemplate>('/api/templates', payload, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function updateTemplate(
   id: string,
   payload: SaveProfileTemplatePayload,
 ) {
-  return request.put<ProfileTemplate>(`/api/templates/${id}`, payload);
+  return request.put<ProfileTemplate>(`/api/templates/${id}`, payload, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function deleteTemplate(id: string) {
-  return request.delete<void>(`/api/templates/${id}`);
+  return request.delete<void>(`/api/templates/${id}`, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function updateProfile(
@@ -124,7 +136,9 @@ export function updateProfile(
 }
 
 export function deleteProfile(id: string) {
-  return request.delete<ProfileListResponse>(`/api/profiles/${id}`);
+  return request.delete<ProfileListResponse>(`/api/profiles/${id}`, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function getProfileContent(id: string) {
@@ -150,11 +164,15 @@ export function refreshProfile() {
 export function refreshProfileById(id: string) {
   return profileRefreshRequest.post<ProfileListResponse>(
     `/api/profiles/${id}/refresh`,
+    undefined,
+    { suppressInfoMessage: true },
   );
 }
 
 export function saveSettings(payload: SaveSettingsPayload) {
-  return request.post<RuntimeSettings>('/api/settings', payload);
+  return request.post<RuntimeSettings>('/api/settings', payload, {
+    suppressInfoMessage: true,
+  });
 }
 
 export function fetchSettings() {
