@@ -429,12 +429,15 @@ pub(super) fn normalize_proxy(proxy: &mut Map<String, Value>, kind: &str) {
         }
         proxy.insert("transport".into(), Value::Object(transport));
     }
+    if let Some(enabled) = proxy.get("tls").and_then(Value::as_bool) {
+        proxy.insert("tls".into(), json!({ "enabled": enabled }));
+    }
     if let Some(insecure) = proxy.remove("skip-cert-verify") {
         let mut tls = proxy
             .remove("tls")
             .and_then(|value| value.as_object().cloned())
             .unwrap_or_default();
-        tls.insert("enabled".into(), json!(true));
+        tls.entry("enabled").or_insert(json!(true));
         tls.insert("insecure".into(), insecure);
         proxy.insert("tls".into(), Value::Object(tls));
     }
@@ -443,7 +446,7 @@ pub(super) fn normalize_proxy(proxy: &mut Map<String, Value>, kind: &str) {
             .remove("tls")
             .and_then(|value| value.as_object().cloned())
             .unwrap_or_default();
-        tls.insert("enabled".into(), json!(true));
+        tls.entry("enabled").or_insert(json!(true));
         tls.insert("server_name".into(), sni);
         proxy.insert("tls".into(), Value::Object(tls));
     }
