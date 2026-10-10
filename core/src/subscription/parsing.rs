@@ -294,7 +294,6 @@ fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<Remot
         if !matches!(
             kind,
             "shadowsocks"
-                | "ssr"
                 | "vmess"
                 | "vless"
                 | "trojan"
@@ -311,7 +310,6 @@ fn parse_clash(remote: &RemoteSource, value: Value, multi: bool) -> Result<Remot
             continue;
         }
         rename(&mut item, "port", "server_port");
-        rename(&mut item, "cipher", "method");
         normalize_proxy(&mut item, kind);
         item.insert("type".into(), Value::String(kind.into()));
         if remote.keep.clash.proxies {
@@ -398,60 +396,231 @@ fn rename(item: &mut Map<String, Value>, from: &str, to: &str) {
     }
 }
 
+/// Translates Clash-only proxy fields into their sing-box equivalents.
+///
+/// Everything sing-box would reject as unknown, misspelled or mistyped is either
+/// relocated into the nested `tls`/`transport`/`obfs` objects or dropped, so the
+/// generated outbound only ever contains fields accepted by the kernel.
 pub(super) fn normalize_proxy(proxy: &mut Map<String, Value>, kind: &str) {
     proxy.remove("alterId");
     proxy.remove("udp");
+    // Clash-only carry-overs without a sing-box counterpart.
+    proxy.remove("encryption");
+    proxy.remove("fingerprint");
+    match kind {
+        "shadowsocks" => rename(proxy, "cipher", "method"),
+        "vmess" => rename(proxy, "cipher", "security"),
+        "vless" => {
+            proxy.remove("cipher");
+        }
+        "hysteria2" => normalize_hysteria2(proxy),
+        "tuic" => {
+            rename(proxy, "congestion-controller", "congestion_control");
+            rename(proxy, "udp-relay-mode", "udp_relay_mode");
+        }
+        _ => {}
+    }
+    normalize_transport(proxy);
+    normalize_tls(proxy, kind);
+}
+
+fn normalize_transport(proxy: &mut Map<String, Value>) {
+    let network = proxy
+        .remove("network")
+        .and_then(|value| value.as_str().map(str::to_ascii_lowercase));
     let ws_opts = proxy
         .remove("ws-opts")
         .and_then(|value| value.as_object().cloned());
-    let network = proxy
-        .remove("network")
-        .and_then(|value| value.as_str().map(str::to_owned));
     let ws_path = proxy.remove("ws-path");
     let ws_headers = proxy.remove("ws-headers");
-    if network.as_deref() == Some("ws") {
-        let mut transport = Map::from_iter([(String::from("type"), json!("ws"))]);
-        if let Some(path) = ws_opts
-            .as_ref()
-            .and_then(|options| options.get("path"))
-            .cloned()
-            .or(ws_path)
-        {
-            transport.insert("path".into(), path);
+    let http_opts = proxy
+        .remove("http-opts")
+        .and_then(|value| value.as_object().cloned());
+    let h2_opts = proxy
+        .remove("h2-opts")
+        .and_then(|value| value.as_object().cloned());
+    let grpc_opts = proxy
+        .remove("grpc-opts")
+        .and_then(|value| value.as_object().cloned());
+    let transport = match network.as_deref() {
+        Some("ws") => {
+            let mut transport = Map::from_iter([(String::from("type"), json!("ws"))]);
+            if let Some(path) = ws_opts
+                .as_ref()
+                .and_then(|options| options.get("path"))
+                .cloned()
+                .or(ws_path)
+            {
+                transport.insert("path".into(), path);
+            }
+            if let Some(headers) = ws_opts
+                .as_ref()
+                .and_then(|options| options.get("headers"))
+                .cloned()
+                .or(ws_headers)
+            {
+                transport.insert("headers".into(), headers);
+            }
+            Some(transport)
         }
-        if let Some(headers) = ws_opts
-            .as_ref()
-            .and_then(|options| options.get("headers"))
-            .cloned()
-            .or(ws_headers)
-        {
-            transport.insert("headers".into(), headers);
+        Some("http") => Some(http_transport(http_opts.as_ref())),
+        Some("h2") => Some(http_transport(h2_opts.as_ref())),
+        Some("grpc") => {
+            let mut transport = Map::from_iter([(String::from("type"), json!("grpc"))]);
+            if let Some(service_name) = grpc_opts
+                .as_ref()
+                .and_then(|options| options.get("grpc-service-name"))
+                .cloned()
+            {
+                transport.insert("service_name".into(), service_name);
+            }
+            Some(transport)
         }
+        Some(value @ ("tcp" | "udp")) => {
+            proxy.insert("network".into(), json!(value));
+            None
+        }
+        _ => None,
+    };
+    if let Some(transport) = transport {
         proxy.insert("transport".into(), Value::Object(transport));
     }
-    if let Some(enabled) = proxy.get("tls").and_then(Value::as_bool) {
-        proxy.insert("tls".into(), json!({ "enabled": enabled }));
+}
+
+fn http_transport(options: Option<&Map<String, Value>>) -> Map<String, Value> {
+    let mut transport = Map::from_iter([(String::from("type"), json!("http"))]);
+    let Some(options) = options else {
+        return transport;
+    };
+    if let Some(host) = options.get("host").cloned() {
+        transport.insert("host".into(), host);
     }
+    if let Some(path) = options.get("path").cloned() {
+        let path = match path {
+            Value::Array(items) => items.into_iter().next().unwrap_or_default(),
+            value => value,
+        };
+        transport.insert("path".into(), path);
+    }
+    if let Some(method) = options.get("method").cloned() {
+        transport.insert("method".into(), method);
+    }
+    if let Some(headers) = options.get("headers").cloned() {
+        transport.insert("headers".into(), headers);
+    }
+    transport
+}
+
+fn normalize_tls(proxy: &mut Map<String, Value>, kind: &str) {
+    let mut tls = match proxy.remove("tls") {
+        Some(Value::Object(object)) => object,
+        Some(Value::Bool(enabled)) => Map::from_iter([(String::from("enabled"), json!(enabled))]),
+        _ => Map::new(),
+    };
     if let Some(insecure) = proxy.remove("skip-cert-verify") {
-        let mut tls = proxy
-            .remove("tls")
-            .and_then(|value| value.as_object().cloned())
-            .unwrap_or_default();
-        tls.entry("enabled").or_insert(json!(true));
-        tls.insert("insecure".into(), insecure);
-        proxy.insert("tls".into(), Value::Object(tls));
+        tls.insert(String::from("insecure"), insecure);
+        tls.entry(String::from("enabled")).or_insert(json!(true));
     }
-    if let Some(sni) = proxy.remove("sni") {
-        let mut tls = proxy
-            .remove("tls")
-            .and_then(|value| value.as_object().cloned())
-            .unwrap_or_default();
-        tls.entry("enabled").or_insert(json!(true));
-        tls.insert("server_name".into(), sni);
-        proxy.insert("tls".into(), Value::Object(tls));
+    if let Some(server_name) = proxy.remove("sni").or_else(|| proxy.remove("servername")) {
+        tls.insert(String::from("server_name"), server_name);
+        tls.entry(String::from("enabled")).or_insert(json!(true));
     }
-    if kind == "vmess" && proxy.get("method") == Some(&json!("auto")) {
-        rename(proxy, "method", "security");
+    if let Some(alpn) = proxy.remove("alpn") {
+        tls.insert(String::from("alpn"), alpn);
+        if !tls.contains_key("enabled") {
+            tls.insert(String::from("enabled"), json!(true));
+        }
+    }
+    if let Some(fingerprint) = proxy.remove("client-fingerprint") {
+        let utls = tls
+            .entry(String::from("utls"))
+            .or_insert_with(|| json!({ "enabled": true }));
+        if let Some(utls) = utls.as_object_mut() {
+            utls.insert(String::from("enabled"), json!(true));
+            utls.insert(String::from("fingerprint"), fingerprint);
+        }
+        if !tls.contains_key("enabled") {
+            tls.insert(String::from("enabled"), json!(true));
+        }
+    }
+    if let Some(reality) = proxy
+        .remove("reality-opts")
+        .and_then(|value| value.as_object().cloned())
+    {
+        let mut options = Map::from_iter([(String::from("enabled"), json!(true))]);
+        if let Some(public_key) = reality.get("public-key") {
+            options.insert(String::from("public_key"), public_key.clone());
+        }
+        if let Some(short_id) = reality.get("short-id") {
+            options.insert(String::from("short_id"), short_id.clone());
+        }
+        tls.insert(String::from("reality"), Value::Object(options));
+        // sing-box refuses to initialize a Reality client without uTLS.
+        tls.entry(String::from("utls"))
+            .or_insert_with(|| json!({ "enabled": true }));
+        if !tls.contains_key("enabled") {
+            tls.insert(String::from("enabled"), json!(true));
+        }
+    }
+    if matches!(kind, "hysteria2" | "tuic" | "anytls") {
+        tls.insert(String::from("enabled"), json!(true));
+    }
+    if !tls.is_empty() {
+        proxy.insert(String::from("tls"), Value::Object(tls));
+    }
+}
+
+fn normalize_hysteria2(proxy: &mut Map<String, Value>) {
+    for (from, to) in [("up", "up_mbps"), ("down", "down_mbps")] {
+        if let Some(value) = proxy.remove(from)
+            && let Some(mbps) = bandwidth_to_mbps(&value)
+        {
+            proxy.insert(String::from(to), json!(mbps));
+        }
+    }
+    let password = proxy.remove("obfs-password");
+    let min_packet_size = proxy.remove("obfs-min-packet-size");
+    let max_packet_size = proxy.remove("obfs-max-packet-size");
+    let Some(obfs) = proxy.remove("obfs") else {
+        return;
+    };
+    let mut obfs = match obfs {
+        Value::Object(object) => object,
+        Value::String(obfs_type) => {
+            Map::from_iter([(String::from("type"), Value::String(obfs_type))])
+        }
+        _ => return,
+    };
+    if let Some(password) = password {
+        obfs.insert(String::from("password"), password);
+    }
+    if let Some(min_packet_size) = min_packet_size {
+        obfs.insert(String::from("min_packet_size"), min_packet_size);
+    }
+    if let Some(max_packet_size) = max_packet_size {
+        obfs.insert(String::from("max_packet_size"), max_packet_size);
+    }
+    proxy.insert(String::from("obfs"), Value::Object(obfs));
+}
+
+/// Reads a Clash bandwidth value such as `30`, `30 Mbps` or `"30mbps"` as Mbps.
+fn bandwidth_to_mbps(value: &Value) -> Option<u64> {
+    match value {
+        Value::Number(number) => number.as_u64().or_else(|| {
+            number
+                .as_f64()
+                .filter(|value| *value >= 0.0)
+                .map(|value| value as u64)
+        }),
+        Value::String(text) => {
+            let digits: String = text
+                .trim()
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .collect();
+            digits.parse().ok()
+        }
+        _ => None,
     }
 }
 

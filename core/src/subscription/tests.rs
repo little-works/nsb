@@ -417,13 +417,22 @@ fn preserves_proxy_fields_and_removes_invalid_default_for_multiple_remotes() {
     .unwrap();
 
     assert_eq!(
-        config["outbounds"][2],
+        config["outbounds"][0],
         json!({
             "type": "selector",
             "tag": "PROXY",
             "outbounds": ["first", "second"],
             "interrupt_exist_connections": true
         })
+    );
+    assert_eq!(
+        config["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|outbound| outbound["tag"].as_str())
+            .collect::<Vec<_>>(),
+        vec!["PROXY", "first", "second"]
     );
 }
 
@@ -577,4 +586,90 @@ fn recursively_merges_preserved_fields_in_remote_order_and_appends_arrays() {
     );
     assert_eq!(config["experimental"]["cache_file"]["enabled"], true);
     assert_eq!(config["experimental"]["cache_file"]["path"], "second.db");
+}
+
+#[test]
+fn translates_clash_tls_and_transport_fields_into_singbox_outbounds() {
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Clash, RemoteKeepFields::default()),
+        r#"proxies:
+  - { name: vless, type: vless, server: example.com, port: 443, uuid: 043b72cb-1464-467c-a2e7-04a4839d0718, alterId: 0, cipher: auto, udp: true, flow: xtls-rprx-vision, encryption: none, tls: true, skip-cert-verify: true, servername: www.cloudflare.com, reality-opts: { public-key: public, short-id: 83726fcc812d }, client-fingerprint: qq, network: tcp }
+  - { name: hysteria, type: hysteria2, server: example.com, port: 8443, password: secret, up: 200, down: 200, obfs: salamander, obfs-password: obfs, sni: hysteria.example.com, skip-cert-verify: false }
+  - { name: tuic, type: tuic, server: example.com, port: 12862, uuid: 043b72cb-1464-467c-a2e7-04a4839d0718, password: secret, skip-cert-verify: false, sni: tuic.example.com, alpn: [h3], congestion-controller: bbr, udp-relay-mode: native }
+  - { name: anytls, type: anytls, server: example.com, port: 443, password: secret, sni: anytls.example.com }
+  - { name: vmess, type: vmess, server: example.com, port: 443, uuid: 043b72cb-1464-467c-a2e7-04a4839d0718, alterId: 0, cipher: auto, network: ws, ws-opts: { path: /path, headers: { Host: example.com } } }"#,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(
+        parsed.proxy_nodes[0],
+        json!({
+            "tag": "vless",
+            "type": "vless",
+            "server": "example.com",
+            "server_port": 443,
+            "uuid": "043b72cb-1464-467c-a2e7-04a4839d0718",
+            "flow": "xtls-rprx-vision",
+            "network": "tcp",
+            "tls": {
+                "enabled": true,
+                "insecure": true,
+                "server_name": "www.cloudflare.com",
+                "utls": {"enabled": true, "fingerprint": "qq"},
+                "reality": {"enabled": true, "public_key": "public", "short_id": "83726fcc812d"}
+            }
+        })
+    );
+    assert_eq!(
+        parsed.proxy_nodes[1],
+        json!({
+            "tag": "hysteria",
+            "type": "hysteria2",
+            "server": "example.com",
+            "server_port": 8443,
+            "password": "secret",
+            "up_mbps": 200,
+            "down_mbps": 200,
+            "obfs": {"type": "salamander", "password": "obfs"},
+            "tls": {"enabled": true, "insecure": false, "server_name": "hysteria.example.com"}
+        })
+    );
+    assert_eq!(
+        parsed.proxy_nodes[2],
+        json!({
+            "tag": "tuic",
+            "type": "tuic",
+            "server": "example.com",
+            "server_port": 12862,
+            "uuid": "043b72cb-1464-467c-a2e7-04a4839d0718",
+            "password": "secret",
+            "congestion_control": "bbr",
+            "udp_relay_mode": "native",
+            "tls": {"enabled": true, "insecure": false, "server_name": "tuic.example.com", "alpn": ["h3"]}
+        })
+    );
+    assert_eq!(
+        parsed.proxy_nodes[3],
+        json!({
+            "tag": "anytls",
+            "type": "anytls",
+            "server": "example.com",
+            "server_port": 443,
+            "password": "secret",
+            "tls": {"enabled": true, "server_name": "anytls.example.com"}
+        })
+    );
+    assert_eq!(
+        parsed.proxy_nodes[4],
+        json!({
+            "tag": "vmess",
+            "type": "vmess",
+            "server": "example.com",
+            "server_port": 443,
+            "uuid": "043b72cb-1464-467c-a2e7-04a4839d0718",
+            "security": "auto",
+            "transport": {"type": "ws", "path": "/path", "headers": {"Host": "example.com"}}
+        })
+    );
 }
