@@ -60,6 +60,87 @@ fn parses_clash_proxies_without_retaining_groups_or_rules() {
 }
 
 #[test]
+fn parses_link_subscription_protocols_and_preserves_safe_warnings() {
+    let body = [
+        "vless://vless-uuid@[2001:db8::1]:443?security=reality&type=tcp&mode=multi&flow=xtls-rprx-vision&sni=front.example&fp=chrome&pbk=public-key&sid=01234567&spx=%2F#VLESS%20node",
+        "hysteria2://hy-user:hy-password@example.test:8443?obfs=salamander&obfs-password=obfs-secret&sni=front.example&insecure=1&alpn=h3#hy2",
+        "anytls://anytls-password@example.test:443?sni=front.example&insecure=true&fp=chrome#anytls",
+        "tuic://tuic-uuid:tuic-password@example.test:443?sni=front.example&alpn=h3&congestion_control=bbr&udp-relay-mode=native#tuic",
+        "unsupported://ignored@example.test:443#ignored",
+    ]
+    .join("\n");
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Links, RemoteKeepFields::default()),
+        &body,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(parsed.proxy_nodes.len(), 4);
+    assert_eq!(parsed.warnings, vec!["Skipped unsupported link on line 5"]);
+    assert_eq!(parsed.proxy_nodes[0]["tag"], "VLESS node");
+    assert_eq!(parsed.proxy_nodes[0]["type"], "vless");
+    assert_eq!(parsed.proxy_nodes[0]["server"], "2001:db8::1");
+    assert_eq!(parsed.proxy_nodes[0]["network"], "tcp");
+    assert_eq!(parsed.proxy_nodes[0]["multiplex"]["enabled"], true);
+    assert_eq!(parsed.proxy_nodes[0]["tls"]["server_name"], "front.example");
+    assert_eq!(parsed.proxy_nodes[0]["tls"]["reality"]["public_key"], "public-key");
+    assert_eq!(parsed.proxy_nodes[0]["tls"]["reality"]["short_id"], "01234567");
+    assert_eq!(parsed.proxy_nodes[1]["obfs"]["type"], "salamander");
+    assert_eq!(parsed.proxy_nodes[1]["obfs"]["password"], "obfs-secret");
+    assert_eq!(parsed.proxy_nodes[1]["tls"]["insecure"], true);
+    assert_eq!(parsed.proxy_nodes[2]["password"], "anytls-password");
+    assert_eq!(parsed.proxy_nodes[3]["congestion_control"], "bbr");
+    assert_eq!(parsed.proxy_nodes[3]["udp_relay_mode"], "native");
+    assert_eq!(parsed.proxy_nodes[3]["tls"]["alpn"], json!(["h3"]));
+}
+
+#[test]
+fn parses_base64_link_subscription_and_applies_outbounds_keep() {
+    let encoded = "dmxlc3M6Ly91dWlkQGV4YW1wbGUudGVzdDo0NDM/c2VjdXJpdHk9dGxzJnR5cGU9dGNwI25vZGU=";
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Links, RemoteKeepFields::default()),
+        encoded,
+        false,
+    )
+    .unwrap();
+    assert_eq!(parsed.proxy_nodes.len(), 1);
+    assert_eq!(parsed.proxy_nodes[0]["tag"], "node");
+    assert_eq!(parsed.proxy_nodes[0]["tls"]["enabled"], true);
+
+    let keep = RemoteKeepFields {
+        outbounds: false,
+        ..RemoteKeepFields::default()
+    };
+    let parsed = parse_remote(&remote(RemoteFormat::Links, keep), encoded, false).unwrap();
+    assert!(parsed.proxy_nodes.is_empty());
+}
+
+#[test]
+fn generates_deterministic_link_tags_and_requires_a_valid_node() {
+    let parsed = parse_remote(
+        &remote(RemoteFormat::Links, RemoteKeepFields::default()),
+        "vless://uuid@example.test:443#same\nvless://uuid@example.test:443#same\nvless://uuid@example.test:443\n",
+        true,
+    )
+    .unwrap();
+    let tags: Vec<_> = parsed
+        .proxy_nodes
+        .iter()
+        .filter_map(|node| node["tag"].as_str())
+        .collect();
+    assert_eq!(tags, vec!["source:same", "source:same-2", "source:vless-example.test-443"]);
+
+    let error = parse_remote(
+        &remote(RemoteFormat::Links, RemoteKeepFields::default()),
+        "this is not a node link",
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(error, "Remote contains no valid supported links");
+}
+
+#[test]
 fn parses_singbox_outbounds_as_nodes_and_groups() {
     let mut keep = RemoteKeepFields::default();
     keep.route.final_ = true;

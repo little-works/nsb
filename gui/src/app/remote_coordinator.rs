@@ -1,10 +1,4 @@
-use std::collections::HashMap;
-use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
 use std::time::Duration;
-
-use futures_util::FutureExt;
-use tokio::sync::{Mutex, watch};
 
 use crate::state::ProfileHeader;
 
@@ -15,64 +9,6 @@ const PROFILE_USER_AGENT: &str = concat!(
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 type DownloadResult = Result<String, String>;
-
-#[derive(Clone, Default)]
-pub(crate) struct RemoteDownloadCoordinator {
-    in_flight: Arc<Mutex<HashMap<String, watch::Sender<Option<DownloadResult>>>>>,
-}
-
-impl RemoteDownloadCoordinator {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    pub(crate) async fn download(
-        &self,
-        url: &str,
-        headers: &[ProfileHeader],
-    ) -> DownloadResult {
-        let (mut receiver, should_spawn) = {
-            let mut in_flight = self.in_flight.lock().await;
-            if let Some(sender) = in_flight.get(url) {
-                (sender.subscribe(), false)
-            } else {
-                let (sender, receiver) = watch::channel(None);
-                in_flight.insert(url.to_string(), sender);
-                (receiver, true)
-            }
-        };
-
-        if should_spawn {
-            let coordinator = self.clone();
-            let url = url.to_string();
-            let headers = headers.to_vec();
-            tokio::spawn(async move {
-                let result = match AssertUnwindSafe(download_profile(&url, &headers))
-                    .catch_unwind()
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(_) => Err(String::from("Remote download worker panicked.")),
-                };
-
-                let mut in_flight = coordinator.in_flight.lock().await;
-                if let Some(sender) = in_flight.remove(&url) {
-                    let _ = sender.send(Some(result));
-                }
-            });
-        }
-
-        loop {
-            if let Some(result) = receiver.borrow_and_update().clone() {
-                return result;
-            }
-            receiver
-                .changed()
-                .await
-                .map_err(|_| String::from("Remote download worker stopped unexpectedly."))?;
-        }
-    }
-}
 
 pub(crate) async fn download_profile(
     url: &str,

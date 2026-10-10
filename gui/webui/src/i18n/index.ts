@@ -237,6 +237,7 @@ const enUS = {
       remoteFormat: 'Subscription Format',
       remoteFormatClash: 'Clash',
       remoteFormatSingbox: 'Sing-Box',
+      remoteFormatLinks: 'Node Links',
       keepFields: 'Keep Fields',
       keepField: {
         clash_proxies: 'proxies',
@@ -635,6 +636,7 @@ const zhCN = {
       remoteFormat: '订阅格式',
       remoteFormatClash: 'Clash',
       remoteFormatSingbox: 'Sing-Box',
+      remoteFormatLinks: '节点链接',
       keepFields: '保留字段',
       keepField: {
         clash_proxies: 'proxies（代理节点）',

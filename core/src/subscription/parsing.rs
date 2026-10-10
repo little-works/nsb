@@ -3,6 +3,7 @@ use jsonc_parser::{ParseOptions, parse_to_serde_value};
 use serde_json::{Map, Value, json};
 
 use super::{RemoteFormat, RemoteSnapshot, RemoteSource};
+use super::links::parse_links;
 
 const RESERVED_TAGS: &[&str] = &["PROXY", "direct", "block"];
 
@@ -38,6 +39,7 @@ pub fn parse_remote(
             })?;
             parse_singbox(remote, value, multi_remote)?
         }
+        RemoteFormat::Links => parse_links(remote, body, multi_remote)?,
     };
     snapshot.updated_at = u64::try_from(Local::now().timestamp()).unwrap_or_default();
     Ok(snapshot)

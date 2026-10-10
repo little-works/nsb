@@ -273,239 +273,249 @@ export default __render<ProfileDialogProps>(() => {
             'clash_proxies',
           ),
         ]
-      : [
-          leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
-            keep.outbounds = checked;
-          }),
-          leaf('inbounds', keepRemote.keep.inbounds, (keep, checked) => {
-            keep.inbounds = checked;
-          }),
-          {
-            id: 'dns',
-            label: t('profiles.dialog.keepSingboxDns'),
-            children: [
-              leaf(
-                'dns.servers',
-                keepRemote.keep.dns.servers,
-                (keep, checked) => {
-                  keep.dns.servers = checked;
-                },
-              ),
-              leaf('dns.rules', keepRemote.keep.dns.rules, (keep, checked) => {
-                keep.dns.rules = checked;
-              }),
-              leaf(
-                'dns.final',
-                keepRemote.keep.dns.final,
-                (keep, checked) => {
-                  keep.dns.final = checked;
-                },
-                'dns_final',
-              ),
-              leaf(
-                'dns.strategy',
-                keepRemote.keep.dns.strategy,
-                (keep, checked) => {
-                  keep.dns.strategy = checked;
-                },
-              ),
-              leaf(
-                'dns.disable_cache',
-                keepRemote.keep.dns.disable_cache,
-                (keep, checked) => {
-                  keep.dns.disable_cache = checked;
-                },
-              ),
-              leaf(
-                'dns.disable_expire',
-                keepRemote.keep.dns.disable_expire,
-                (keep, checked) => {
-                  keep.dns.disable_expire = checked;
-                },
-              ),
-              leaf(
-                'dns.independent_cache',
-                keepRemote.keep.dns.independent_cache,
-                (keep, checked) => {
-                  keep.dns.independent_cache = checked;
-                },
-              ),
-              leaf(
-                'dns.cache_capacity',
-                keepRemote.keep.dns.cache_capacity,
-                (keep, checked) => {
-                  keep.dns.cache_capacity = checked;
-                },
-              ),
-              {
-                id: 'dns-optimistic',
-                label: t('profiles.dialog.keepField.optimistic'),
-                children: [
-                  leaf(
-                    'dns.optimistic.enabled',
-                    keepRemote.keep.dns.optimistic.enabled,
-                    (keep, checked) => {
-                      keep.dns.optimistic.enabled = checked;
-                    },
-                  ),
-                  leaf(
-                    'dns.optimistic.timeout',
-                    keepRemote.keep.dns.optimistic.timeout,
-                    (keep, checked) => {
-                      keep.dns.optimistic.timeout = checked;
-                    },
-                  ),
-                ],
-              },
-              leaf(
-                'dns.timeout',
-                keepRemote.keep.dns.timeout,
-                (keep, checked) => {
-                  keep.dns.timeout = checked;
-                },
-              ),
-              leaf(
-                'dns.reverse_mapping',
-                keepRemote.keep.dns.reverse_mapping,
-                (keep, checked) => {
-                  keep.dns.reverse_mapping = checked;
-                },
-              ),
-              leaf(
-                'dns.client_subnet',
-                keepRemote.keep.dns.client_subnet,
-                (keep, checked) => {
-                  keep.dns.client_subnet = checked;
-                },
-              ),
-              leaf(
-                'dns.fakeip',
-                keepRemote.keep.dns.fakeip,
-                (keep, checked) => {
-                  keep.dns.fakeip = checked;
-                },
-              ),
-            ],
-          },
-          {
-            id: 'singbox-route',
-            label: t('profiles.dialog.keepParentSingboxRoute'),
-            children: [
-              leaf(
-                'route.rules',
-                keepRemote.keep.route.rules,
-                (keep, checked) => {
-                  keep.route.rules = checked;
-                },
-              ),
-              leaf(
-                'route.rule_set',
-                keepRemote.keep.route.rule_set,
-                (keep, checked) => {
-                  keep.route.rule_set = checked;
-                },
-              ),
-              leaf(
-                'route.final',
-                keepRemote.keep.route.final,
-                (keep, checked) => {
-                  keep.route.final = checked;
-                },
-                'route_final',
-              ),
-              ...(
-                [
-                  'auto_detect_interface',
-                  'override_android_vpn',
-                  'default_interface',
-                  'default_mark',
-                  'find_process',
-                  'find_neighbor',
-                  'dhcp_lease_files',
-                  'default_http_client',
-                  'default_domain_resolver',
-                  'default_network_strategy',
-                  'default_network_type',
-                  'default_fallback_network_type',
-                  'default_fallback_delay',
-                ] as const
-              ).map((key) =>
+      : keepRemote.format === 'links'
+        ? [
+            leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
+              keep.outbounds = checked;
+            }),
+          ]
+        : [
+            leaf('outbounds', keepRemote.keep.outbounds, (keep, checked) => {
+              keep.outbounds = checked;
+            }),
+            leaf('inbounds', keepRemote.keep.inbounds, (keep, checked) => {
+              keep.inbounds = checked;
+            }),
+            {
+              id: 'dns',
+              label: t('profiles.dialog.keepSingboxDns'),
+              children: [
                 leaf(
-                  `route.${key}`,
-                  keepRemote.keep.route[key],
+                  'dns.servers',
+                  keepRemote.keep.dns.servers,
                   (keep, checked) => {
-                    keep.route[key] = checked;
+                    keep.dns.servers = checked;
                   },
                 ),
-              ),
-            ],
-          },
-          {
-            id: 'singbox-experimental',
-            label: t('profiles.dialog.keepParentSingboxExperimental'),
-            children: [
-              {
-                id: 'experimental-cache-file',
-                label: t('profiles.dialog.keepSingboxCacheFile'),
-                children: (
-                  [
-                    'enabled',
-                    'path',
-                    'cache_id',
-                    'store_fakeip',
-                    'store_rdrc',
-                    'rdrc_timeout',
-                    'store_dns',
-                  ] as const
-                ).map((key) =>
-                  leaf(
-                    `experimental.cache_file.${key}`,
-                    keepRemote.keep.experimental.cache_file[key],
-                    (keep, checked) => {
-                      keep.experimental.cache_file[key] = checked;
-                    },
-                  ),
+                leaf(
+                  'dns.rules',
+                  keepRemote.keep.dns.rules,
+                  (keep, checked) => {
+                    keep.dns.rules = checked;
+                  },
                 ),
-              },
-              {
-                id: 'experimental-clash-api',
-                label: t('profiles.dialog.keepSingboxClashApi'),
-                children: (
-                  [
-                    'external_controller',
-                    'external_ui',
-                    'external_ui_download_url',
-                    'external_ui_download_detour',
-                    'secret',
-                    'default_mode',
-                    'access_control_allow_origin',
-                    'access_control_allow_private_network',
-                    'store_mode',
-                    'store_selected',
-                    'store_fakeip',
-                    'cache_file',
-                    'cache_id',
-                  ] as const
-                ).map((key) =>
-                  leaf(
-                    `experimental.clash_api.${key}`,
-                    keepRemote.keep.experimental.clash_api[key],
-                    (keep, checked) => {
-                      keep.experimental.clash_api[key] = checked;
-                    },
-                  ),
+                leaf(
+                  'dns.final',
+                  keepRemote.keep.dns.final,
+                  (keep, checked) => {
+                    keep.dns.final = checked;
+                  },
+                  'dns_final',
                 ),
-              },
-              leaf(
-                'experimental.v2ray_api',
-                keepRemote.keep.experimental.v2ray_api,
-                (keep, checked) => {
-                  keep.experimental.v2ray_api = checked;
+                leaf(
+                  'dns.strategy',
+                  keepRemote.keep.dns.strategy,
+                  (keep, checked) => {
+                    keep.dns.strategy = checked;
+                  },
+                ),
+                leaf(
+                  'dns.disable_cache',
+                  keepRemote.keep.dns.disable_cache,
+                  (keep, checked) => {
+                    keep.dns.disable_cache = checked;
+                  },
+                ),
+                leaf(
+                  'dns.disable_expire',
+                  keepRemote.keep.dns.disable_expire,
+                  (keep, checked) => {
+                    keep.dns.disable_expire = checked;
+                  },
+                ),
+                leaf(
+                  'dns.independent_cache',
+                  keepRemote.keep.dns.independent_cache,
+                  (keep, checked) => {
+                    keep.dns.independent_cache = checked;
+                  },
+                ),
+                leaf(
+                  'dns.cache_capacity',
+                  keepRemote.keep.dns.cache_capacity,
+                  (keep, checked) => {
+                    keep.dns.cache_capacity = checked;
+                  },
+                ),
+                {
+                  id: 'dns-optimistic',
+                  label: t('profiles.dialog.keepField.optimistic'),
+                  children: [
+                    leaf(
+                      'dns.optimistic.enabled',
+                      keepRemote.keep.dns.optimistic.enabled,
+                      (keep, checked) => {
+                        keep.dns.optimistic.enabled = checked;
+                      },
+                    ),
+                    leaf(
+                      'dns.optimistic.timeout',
+                      keepRemote.keep.dns.optimistic.timeout,
+                      (keep, checked) => {
+                        keep.dns.optimistic.timeout = checked;
+                      },
+                    ),
+                  ],
                 },
-              ),
-            ],
-          },
-        ];
+                leaf(
+                  'dns.timeout',
+                  keepRemote.keep.dns.timeout,
+                  (keep, checked) => {
+                    keep.dns.timeout = checked;
+                  },
+                ),
+                leaf(
+                  'dns.reverse_mapping',
+                  keepRemote.keep.dns.reverse_mapping,
+                  (keep, checked) => {
+                    keep.dns.reverse_mapping = checked;
+                  },
+                ),
+                leaf(
+                  'dns.client_subnet',
+                  keepRemote.keep.dns.client_subnet,
+                  (keep, checked) => {
+                    keep.dns.client_subnet = checked;
+                  },
+                ),
+                leaf(
+                  'dns.fakeip',
+                  keepRemote.keep.dns.fakeip,
+                  (keep, checked) => {
+                    keep.dns.fakeip = checked;
+                  },
+                ),
+              ],
+            },
+            {
+              id: 'singbox-route',
+              label: t('profiles.dialog.keepParentSingboxRoute'),
+              children: [
+                leaf(
+                  'route.rules',
+                  keepRemote.keep.route.rules,
+                  (keep, checked) => {
+                    keep.route.rules = checked;
+                  },
+                ),
+                leaf(
+                  'route.rule_set',
+                  keepRemote.keep.route.rule_set,
+                  (keep, checked) => {
+                    keep.route.rule_set = checked;
+                  },
+                ),
+                leaf(
+                  'route.final',
+                  keepRemote.keep.route.final,
+                  (keep, checked) => {
+                    keep.route.final = checked;
+                  },
+                  'route_final',
+                ),
+                ...(
+                  [
+                    'auto_detect_interface',
+                    'override_android_vpn',
+                    'default_interface',
+                    'default_mark',
+                    'find_process',
+                    'find_neighbor',
+                    'dhcp_lease_files',
+                    'default_http_client',
+                    'default_domain_resolver',
+                    'default_network_strategy',
+                    'default_network_type',
+                    'default_fallback_network_type',
+                    'default_fallback_delay',
+                  ] as const
+                ).map((key) =>
+                  leaf(
+                    `route.${key}`,
+                    keepRemote.keep.route[key],
+                    (keep, checked) => {
+                      keep.route[key] = checked;
+                    },
+                  ),
+                ),
+              ],
+            },
+            {
+              id: 'singbox-experimental',
+              label: t('profiles.dialog.keepParentSingboxExperimental'),
+              children: [
+                {
+                  id: 'experimental-cache-file',
+                  label: t('profiles.dialog.keepSingboxCacheFile'),
+                  children: (
+                    [
+                      'enabled',
+                      'path',
+                      'cache_id',
+                      'store_fakeip',
+                      'store_rdrc',
+                      'rdrc_timeout',
+                      'store_dns',
+                    ] as const
+                  ).map((key) =>
+                    leaf(
+                      `experimental.cache_file.${key}`,
+                      keepRemote.keep.experimental.cache_file[key],
+                      (keep, checked) => {
+                        keep.experimental.cache_file[key] = checked;
+                      },
+                    ),
+                  ),
+                },
+                {
+                  id: 'experimental-clash-api',
+                  label: t('profiles.dialog.keepSingboxClashApi'),
+                  children: (
+                    [
+                      'external_controller',
+                      'external_ui',
+                      'external_ui_download_url',
+                      'external_ui_download_detour',
+                      'secret',
+                      'default_mode',
+                      'access_control_allow_origin',
+                      'access_control_allow_private_network',
+                      'store_mode',
+                      'store_selected',
+                      'store_fakeip',
+                      'cache_file',
+                      'cache_id',
+                    ] as const
+                  ).map((key) =>
+                    leaf(
+                      `experimental.clash_api.${key}`,
+                      keepRemote.keep.experimental.clash_api[key],
+                      (keep, checked) => {
+                        keep.experimental.clash_api[key] = checked;
+                      },
+                    ),
+                  ),
+                },
+                leaf(
+                  'experimental.v2ray_api',
+                  keepRemote.keep.experimental.v2ray_api,
+                  (keep, checked) => {
+                    keep.experimental.v2ray_api = checked;
+                  },
+                ),
+              ],
+            },
+          ];
   function renderKeepNode(node: KeepFieldNode, nodeIndex: number): VNode {
     const remoteIndex = keepFieldsRemoteIndex.value;
     const rowClass = [
@@ -837,6 +847,17 @@ export default __render<ProfileDialogProps>(() => {
                                 }
                               />
                               {t('profiles.dialog.remoteFormatSingbox')}
+                            </label>
+                            <label class="flex h-9 items-center gap-2 text-sm text-on-surface">
+                              <Radio
+                                checked={remote.format === 'links'}
+                                name={`remote-format-${index}`}
+                                value="links"
+                                onChange={() =>
+                                  updateRemote(index, { format: 'links' })
+                                }
+                              />
+                              {t('profiles.dialog.remoteFormatLinks')}
                             </label>
                           </div>
                         </fieldset>

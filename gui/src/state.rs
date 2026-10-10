@@ -62,6 +62,7 @@ pub enum ProfileRemoteFormat {
     #[default]
     Clash,
     Singbox,
+    Links,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

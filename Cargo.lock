@@ -1683,13 +1683,16 @@ dependencies = [
 name = "nsb-core"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "jsonc-parser",
+ "percent-encoding",
  "rquickjs",
  "serde",
  "serde_json",
  "serde_with",
  "serde_yaml",
+ "url",
 ]
 
 [[package]]

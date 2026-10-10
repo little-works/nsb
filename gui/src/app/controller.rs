@@ -609,7 +609,7 @@ impl AppController {
                 .map(|item| item.content.clone())
                 .ok_or_else(|| String::from("Profile references a missing Template."))?
         };
-        let collection = collect_remote_snapshots(profile, profile_host, None).await?;
+        let collection = collect_remote_snapshots(profile, profile_host, false).await?;
         for diagnostic in &collection.diagnostics {
             warn!("Profile {} remote update diagnostic: {diagnostic}", profile.id);
         }

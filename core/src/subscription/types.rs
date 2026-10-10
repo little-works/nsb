@@ -7,6 +7,7 @@ pub enum RemoteFormat {
     #[default]
     Clash,
     Singbox,
+    Links,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

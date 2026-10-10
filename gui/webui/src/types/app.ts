@@ -1,4 +1,5 @@
 import type { AppLanguage } from '@/rs-type/AppLanguage';
+import type { ProfileRemoteFormat } from '@/rs-type/ProfileRemoteFormat';
 import type { ProfileRemoteKeepFields } from '@/rs-type/ProfileRemoteKeepFields';
 
 export type RequestMethod =
@@ -73,7 +74,7 @@ export interface SaveProfilePayload {
     name: string;
     url: string;
     headers: Array<{ key: string; value: string }>;
-    format: 'clash' | 'singbox';
+    format: ProfileRemoteFormat;
     keep: ProfileRemoteKeepFields;
   }>;
   hook?: string | null;

@@ -1,5 +1,6 @@
 mod builder;
 mod hooks;
+mod links;
 mod parsing;
 mod types;
 
