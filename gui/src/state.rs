@@ -36,6 +36,7 @@ pub struct KernelInfo {
     pub status: KernelStatus,
     pub runtime_source: KernelRuntimeSource,
     pub last_started_at: String,
+    pub started_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -322,6 +323,7 @@ impl AppState {
                 status: KernelStatus::Stopped,
                 runtime_source: KernelRuntimeSource::None,
                 last_started_at: String::from("Not started"),
+                started_at: None,
             },
             gui_config,
         }
@@ -330,14 +332,17 @@ impl AppState {
     pub fn mark_kernel_running(&mut self) {
         self.kernel.status = KernelStatus::Running;
         self.kernel.last_started_at = String::from("Just now");
+        self.kernel.started_at = Some(current_timestamp());
     }
 
     pub fn mark_kernel_stopped(&mut self) {
+        self.kernel.started_at = None;
         self.kernel.status = KernelStatus::Stopped;
         self.kernel.runtime_source = KernelRuntimeSource::None;
     }
 
     pub fn mark_kernel_failed(&mut self) {
+        self.kernel.started_at = None;
         self.kernel.status = KernelStatus::Failed;
         self.kernel.runtime_source = KernelRuntimeSource::None;
     }

@@ -21,12 +21,30 @@ import { useI18n } from 'vue-i18n';
 import { Icon } from '@/components/icon';
 import { useQueryClient } from '@tanstack/vue-query';
 import { i18n } from '@/i18n';
+import { useNow } from '@vueuse/core';
 
 const { traffic, connectionState, failureNotificationVersion } =
   useScoreStreamData();
 const runtimeStatus = useRuntimeStatus();
 const queryClient = useQueryClient();
 const { t } = useI18n();
+const now = useNow({ interval: 1000 });
+const uptime = computed(() => {
+  const kernel = runtimeStatus.data.value?.kernel;
+  if (kernel?.status !== 'Running' || kernel.started_at == null) return '—';
+
+  const seconds = Math.max(
+    0,
+    Math.floor(now.value.getTime() / 1000 - kernel.started_at),
+  );
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const time = [hours, minutes, seconds % 60]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':');
+  return days > 0 ? t('traffic.uptimeDays', { days, time }) : time;
+});
 const coreStatus = computed(() => {
   const kernel = runtimeStatus.data.value?.kernel;
   const installed = kernel?.installed ?? true;
@@ -203,6 +221,20 @@ export default __render(() => {
               {formatBytes(traffic.value.up)}/s
             </p>
           </div>
+        </div>
+        <div
+          class={[
+            'flex h-9 items-center justify-between gap-2 rounded px-2',
+            'bg-surface-container-high',
+            'text-xs',
+          ]}
+        >
+          <span class="shrink-0 text-on-surface-variant">
+            {t('traffic.uptime')}
+          </span>
+          <span class="whitespace-nowrap font-mono tabular-nums text-on-surface">
+            {uptime.value}
+          </span>
         </div>
         {runtimeStatus.data.value?.kernel.installed ? (
           <Button

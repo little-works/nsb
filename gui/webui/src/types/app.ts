@@ -41,6 +41,7 @@ export interface KernelInfo {
   version: string;
   status: 'Running' | 'Stopped' | 'Failed';
   last_started_at: string;
+  started_at: number | null;
 }
 
 export interface RuntimeStatus {

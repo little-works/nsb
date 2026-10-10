@@ -44,6 +44,10 @@ function isRuntimeStatus(value: unknown): value is RuntimeStatus {
     typeof kernel.config_path === 'string' &&
     typeof kernel.version === 'string' &&
     typeof kernel.last_started_at === 'string' &&
+    (kernel.started_at === null ||
+      (typeof kernel.started_at === 'number' &&
+        Number.isFinite(kernel.started_at) &&
+        kernel.started_at >= 0)) &&
     (kernel.status === 'Running' ||
       kernel.status === 'Stopped' ||
       kernel.status === 'Failed')

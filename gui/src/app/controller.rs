@@ -779,6 +779,10 @@ impl AppController {
                     self.state.kernel.controller_secret = launch_config.secret;
                 }
                 self.state.kernel.status = crate::state::KernelStatus::Running;
+                self.state
+                    .kernel
+                    .started_at
+                    .get_or_insert_with(current_timestamp);
                 self.state.kernel.runtime_source = if self.kernel_started_by_this_instance
                     && singbox_host
                         .child_pid()
@@ -794,6 +798,7 @@ impl AppController {
                 }
             }
             Ok(None) => {
+                self.state.kernel.started_at = None;
                 self.state.kernel.status = offline_kernel_status(previous_status);
                 self.kernel_started_by_this_instance = false;
                 self.state.kernel.controller_addr = String::from("Assigned randomly at startup");
@@ -801,6 +806,7 @@ impl AppController {
                 self.state.kernel.runtime_source = KernelRuntimeSource::None;
             }
             Err(_) => {
+                self.state.kernel.started_at = None;
                 self.state.kernel.status = offline_kernel_status(previous_status);
                 self.kernel_started_by_this_instance = false;
                 self.state.kernel.controller_addr = String::from("Assigned randomly at startup");

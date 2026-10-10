@@ -82,6 +82,8 @@ const enUS = {
   },
   traffic: {
     running: 'Running',
+    uptime: 'Uptime',
+    uptimeDays: '{days}d {time}',
     stopped: 'Stopped',
     failed: 'Failed',
     start: 'Start core',
@@ -485,6 +487,8 @@ const zhCN = {
   },
   traffic: {
     running: '运行中',
+    uptime: '运行时间',
+    uptimeDays: '{days} 天 {time}',
     stopped: '已停止',
     failed: '启动失败',
     start: '启动内核',
