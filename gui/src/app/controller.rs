@@ -12,11 +12,6 @@ use crate::state::{
     generate_profile_id,
 };
 
-const PROFILE_USER_AGENT: &str = concat!(
-    "ClashforWindows/0.20.16 clash-verge/2.5.2 NSB/",
-    env!("CARGO_PKG_VERSION"),
-);
-
 fn unique_name(
     value: &str,
     fallback: &str,
@@ -619,7 +614,7 @@ impl AppController {
 
         for remote in &profile.remotes {
             let cached = profile_host
-                .read_remote_raw(&profile.id, &remote.name)
+                .read_remote_raw(&remote.url)
                 .await?
                 .ok_or_else(|| {
                     format!(
@@ -742,31 +737,6 @@ impl AppController {
                 .map_err(|err| format!("Invalid Profile Header value: {err}"))?;
         }
         Ok(())
-    }
-
-    pub async fn download_profile(url: &str, headers: &[ProfileHeader]) -> Result<String, String> {
-        let mut request = reqwest::Client::new()
-            .get(url)
-            .header(reqwest::header::USER_AGENT, PROFILE_USER_AGENT);
-        for header in headers {
-            let name = reqwest::header::HeaderName::from_bytes(header.key.trim().as_bytes())
-                .map_err(|err| format!("Invalid Profile Header name: {err}"))?;
-            let value = reqwest::header::HeaderValue::from_str(&header.value)
-                .map_err(|err| format!("Invalid Profile Header value: {err}"))?;
-            request = request.header(name, value);
-        }
-
-        let response = request
-            .send()
-            .await
-            .map_err(|err| format!("Failed to download Profile configuration: {err}"))?
-            .error_for_status()
-            .map_err(|err| format!("Profile returned an error status: {err}"))?;
-
-        response
-            .text()
-            .await
-            .map_err(|err| format!("Failed to read Profile content: {err}"))
     }
 
     async fn sync_kernel_runtime(&mut self, singbox_host: &mut SingBoxHost) {

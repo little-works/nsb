@@ -1,5 +1,6 @@
 mod controller;
 pub mod data_transfer;
+mod remote_coordinator;
 mod runtime;
 
 use std::sync::Arc;

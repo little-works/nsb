@@ -1,8 +1,11 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::fs;
 
 use crate::utils::path::ensure_data_dir;
+
+static REMOTE_CACHE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 pub struct ProfileHost {
@@ -54,18 +57,12 @@ impl ProfileHost {
         Ok(())
     }
 
-    pub fn remote_raw_path(&self, profile_id: &str, remote_name: &str) -> PathBuf {
-        self.remote_cache_dir(profile_id)
-            .join(format!("{}.raw.txt", self.safe_remote_name(remote_name)))
+    pub fn remote_raw_path(&self, url: &str) -> PathBuf {
+        self.remote_cache_dir().join(format!("{}.raw.txt", sha256_hex(url)))
     }
 
-    pub async fn save_remote_raw(
-        &self,
-        profile_id: &str,
-        remote_name: &str,
-        content: &str,
-    ) -> Result<(), String> {
-        let path = self.remote_raw_path(profile_id, remote_name);
+    pub async fn save_remote_raw(&self, url: &str, content: &str) -> Result<(), String> {
+        let path = self.remote_raw_path(url);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(|err| {
                 format!(
@@ -74,22 +71,26 @@ impl ProfileHost {
                 )
             })?;
         }
-        fs::write(&path, content).await.map_err(|err| {
+        let temp_path = self.remote_raw_temp_path(&path);
+        fs::write(&temp_path, content).await.map_err(|err| {
             format!(
                 "Failed to write Remote raw cache: {}: {err}",
-                path.display()
+                temp_path.display()
             )
         })?;
+        if let Err(err) = atomic_replace(&temp_path, &path).await {
+            let _ = fs::remove_file(&temp_path).await;
+            return Err(format!(
+                "Failed to replace Remote raw cache: {}: {err}",
+                path.display()
+            ));
+        }
 
         Ok(())
     }
 
-    pub async fn read_remote_raw(
-        &self,
-        profile_id: &str,
-        remote_name: &str,
-    ) -> Result<Option<String>, String> {
-        let path = self.remote_raw_path(profile_id, remote_name);
+    pub async fn read_remote_raw(&self, url: &str) -> Result<Option<String>, String> {
+        let path = self.remote_raw_path(url);
         if !fs::try_exists(&path).await.map_err(|err| {
             format!(
                 "Failed to check Remote raw cache: {}: {err}",
@@ -104,34 +105,17 @@ impl ProfileHost {
             .map_err(|err| format!("Failed to read Remote raw cache: {}: {err}", path.display()))
     }
 
-    fn remote_cache_dir(&self, profile_id: &str) -> PathBuf {
-        self.runtime_dir().join(profile_id).join("remotes")
+    fn remote_cache_dir(&self) -> PathBuf {
+        self.data_dir.join("runtime").join("remotes")
     }
 
-    fn safe_remote_name(&self, remote_name: &str) -> String {
-        let safe_name = remote_name
-            .trim()
-            .chars()
-            .map(|character| {
-                if character.is_control()
-                    || matches!(
-                        character,
-                        '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
-                    )
-                {
-                    '_'
-                } else {
-                    character
-                }
-            })
-            .collect::<String>()
-            .trim_matches([' ', '.'])
-            .to_string();
-        if safe_name.is_empty() {
-            String::from("default")
-        } else {
-            safe_name
-        }
+    fn remote_raw_temp_path(&self, path: &Path) -> PathBuf {
+        let counter = REMOTE_CACHE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("remote.raw.txt");
+        path.with_file_name(format!(".{file_name}.{}.{}.tmp", std::process::id(), counter))
     }
 
     pub async fn migrate_runtime(&self, id: &str) -> Result<(), String> {
@@ -208,5 +192,61 @@ impl ProfileHost {
                 .await
                 .map_err(|err| format!("Failed to delete Profile cache: {}: {err}", path.display()))
         }
+    }
+}
+
+fn sha256_hex(value: &str) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, value.as_bytes());
+    digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+async fn atomic_replace(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    #[cfg(windows)]
+    {
+        let source = source.to_path_buf();
+        let destination = destination.to_path_buf();
+        tokio::task::spawn_blocking(move || atomic_replace_windows(&source, &destination))
+            .await
+            .map_err(std::io::Error::other)?
+    }
+
+    #[cfg(not(windows))]
+    {
+        fs::rename(source, destination).await
+    }
+}
+
+#[cfg(windows)]
+fn atomic_replace_windows(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }

@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::app::controller::AppController;
+use crate::app::remote_coordinator::RemoteDownloadCoordinator;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
 use crate::state::{KernelInfo, ProfileRemote, ProfileRemoteFormat};
@@ -22,6 +23,7 @@ pub struct GuiRuntime {
     pub singbox_host: SingBoxHost,
     pub profile_host: ProfileHost,
     pub updating_profiles: HashSet<String>,
+    remote_downloads: RemoteDownloadCoordinator,
     kernel_status_tx: broadcast::Sender<KernelInfo>,
 }
 
@@ -153,6 +155,7 @@ impl GuiRuntime {
             singbox_host,
             profile_host,
             updating_profiles: HashSet::new(),
+            remote_downloads: RemoteDownloadCoordinator::new(),
             kernel_status_tx,
         })
     }
@@ -355,11 +358,11 @@ pub async fn update_profile_runtime(
         }
     };
 
-    let profile_host = {
+    let (profile_host, remote_downloads) = {
         let guard = runtime.lock().await;
-        guard.profile_host.clone()
+        (guard.profile_host.clone(), guard.remote_downloads.clone())
     };
-    let result = {
+    let result = async {
         let template = if let Some(content) = profile.inline_template.clone() {
             content
         } else {
@@ -376,25 +379,31 @@ pub async fn update_profile_runtime(
         };
         let remotes = profile.remotes.clone();
         let multi_remote = remotes.len() > 1;
+        let mut downloaded_by_url: HashMap<String, Result<String, String>> = HashMap::new();
+        let mut saved_urls = HashSet::new();
         let mut snapshots = Vec::new();
         for remote in &remotes {
-            let snapshot = match AppController::download_profile(&remote.url, &remote.headers).await
-            {
+            let downloaded = if let Some(downloaded) = downloaded_by_url.get(&remote.url) {
+                downloaded.clone()
+            } else {
+                let downloaded = remote_downloads
+                    .download(&remote.url, &remote.headers)
+                    .await;
+                downloaded_by_url.insert(remote.url.clone(), downloaded.clone());
+                downloaded
+            };
+            let content = match downloaded {
                 Ok(content) => {
-                    let snapshot = parse_remote(&remote_source(remote), &content, multi_remote)?;
-                    for warning in &snapshot.warnings {
-                        log::warn!("{warning}");
+                    if saved_urls.insert(remote.url.clone()) {
+                        profile_host.save_remote_raw(&remote.url, &content).await?;
                     }
-                    profile_host
-                        .save_remote_raw(&profile.id, &remote.name, &content)
-                        .await?;
                     log::info!(
                         "Remote fetch succeeded: profile_id={} remote={} url={}",
                         profile.id,
                         remote.name,
                         remote.url
                     );
-                    snapshot
+                    content
                 }
                 Err(error) => {
                     log::warn!(
@@ -404,7 +413,7 @@ pub async fn update_profile_runtime(
                         remote.url
                     );
                     let Some(cached) = profile_host
-                        .read_remote_raw(&profile.id, &remote.name)
+                        .read_remote_raw(&remote.url)
                         .await?
                     else {
                         return Err(format!(
@@ -412,14 +421,17 @@ pub async fn update_profile_runtime(
                             remote.name
                         ));
                     };
-                    parse_remote(&remote_source(remote), &cached, multi_remote).map_err(|err| {
-                        format!(
-                            "Failed to parse raw cache for Remote {}: {err}",
-                            remote.name
-                        )
-                    })?
+                    cached
                 }
             };
+            let snapshot = parse_remote(&remote_source(remote), &content, multi_remote).map_err(
+                |err| {
+                    format!("Failed to parse raw cache for Remote {}: {err}", remote.name)
+                },
+            )?;
+            for warning in &snapshot.warnings {
+                log::warn!("{warning}");
+            }
             snapshots.push(snapshot);
         }
         build_config(&template, snapshots, profile.hook.as_deref()).map_err(
@@ -432,7 +444,8 @@ pub async fn update_profile_runtime(
                     error
                 },
             )
-    };
+    }
+    .await;
 
     let mut guard = runtime.lock().await;
     guard.updating_profiles.remove(&profile_id);
