@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures_util::FutureExt;
 use tokio::sync::{Mutex, watch};
@@ -11,6 +12,7 @@ const PROFILE_USER_AGENT: &str = concat!(
     "ClashforWindows/0.20.16 clash-verge/2.5.2 NSB/",
     env!("CARGO_PKG_VERSION"),
 );
+const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 type DownloadResult = Result<String, String>;
 
@@ -78,6 +80,7 @@ pub(crate) async fn download_profile(
 ) -> DownloadResult {
     let mut request = reqwest::Client::new()
         .get(url)
+        .timeout(REMOTE_REQUEST_TIMEOUT)
         .header(reqwest::header::USER_AGENT, PROFILE_USER_AGENT);
     for header in headers {
         let name = reqwest::header::HeaderName::from_bytes(header.key.trim().as_bytes())
