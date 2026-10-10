@@ -6,12 +6,12 @@ use crate::app::controller::AppController;
 use crate::app::remote_coordinator::RemoteDownloadCoordinator;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::{ProfileHost, SingBoxHost};
-use crate::state::{KernelInfo, ProfileRemote, ProfileRemoteFormat};
+use crate::state::{KernelInfo, ProfileItem, ProfileRemote, ProfileRemoteFormat};
 use nsb_core::{
     RemoteClashKeepFields, RemoteDnsKeepFields, RemoteDnsOptimisticKeepFields,
     RemoteExperimentalCacheFileKeepFields, RemoteExperimentalClashApiKeepFields,
     RemoteExperimentalKeepFields, RemoteFormat, RemoteKeepFields, RemoteRouteKeepFields,
-    RemoteSource, build_config, parse_remote,
+    RemoteSnapshot, RemoteSource, build_config, parse_remote,
 };
 use tokio::sync::{Mutex, broadcast};
 
@@ -121,6 +121,243 @@ pub(crate) fn remote_source(remote: &ProfileRemote) -> RemoteSource {
                 v2ray_api: remote.keep.experimental.v2ray_api,
             },
         },
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RemoteCollection {
+    pub snapshots: Vec<RemoteSnapshot>,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug)]
+enum CachedRemoteSnapshot {
+    Missing,
+    ReadError(String),
+    ParseError(String),
+    Parsed(RemoteSnapshot),
+}
+
+/// Collects all usable snapshots for a Profile while retaining the configured
+/// remote count for the caller. A refresh supplies a downloader; kernel start
+/// passes `None` so this path only reads the raw cache.
+pub(crate) async fn collect_remote_snapshots(
+    profile: &ProfileItem,
+    profile_host: &ProfileHost,
+    remote_downloads: Option<&RemoteDownloadCoordinator>,
+) -> Result<RemoteCollection, String> {
+    let multi_remote = profile.remotes.len() > 1;
+    let mut downloaded_by_url: HashMap<String, Result<String, String>> = HashMap::new();
+    let mut saved_urls = HashSet::new();
+    let mut snapshots = Vec::new();
+    let mut diagnostics = Vec::new();
+
+    for remote in &profile.remotes {
+        let downloaded = if let Some(coordinator) = remote_downloads {
+            Some(
+                if let Some(downloaded) = downloaded_by_url.get(&remote.url) {
+                    downloaded.clone()
+                } else {
+                    let downloaded = coordinator.download(&remote.url, &remote.headers).await;
+                    downloaded_by_url.insert(remote.url.clone(), downloaded.clone());
+                    downloaded
+                },
+            )
+        } else {
+            None
+        };
+
+        if let Some(downloaded) = downloaded {
+            match downloaded {
+                Ok(content) => match parse_remote(&remote_source(remote), &content, multi_remote) {
+                    Ok(snapshot) => {
+                        if saved_urls.insert(remote.url.clone()) {
+                            profile_host.save_remote_raw(&remote.url, &content).await?;
+                        }
+                        retain_remote_snapshot(&mut snapshots, snapshot);
+                        continue;
+                    }
+                    Err(parse_error) => {
+                        let cache = read_cached_snapshot(
+                            profile_host,
+                            remote,
+                            multi_remote,
+                        )
+                        .await;
+                        match cache {
+                            CachedRemoteSnapshot::Parsed(snapshot) => {
+                                diagnostics.push(format!(
+                                    "Remote '{}' returned invalid content; using cached content. Reason: {}",
+                                    safe_remote_name(&remote.name),
+                                    safe_remote_error(&parse_error),
+                                ));
+                                retain_remote_snapshot(&mut snapshots, snapshot);
+                            }
+                            CachedRemoteSnapshot::Missing => diagnostics.push(format!(
+                                "Remote '{}' returned invalid content; skipped because no cached content is available. Reason: {}",
+                                safe_remote_name(&remote.name),
+                                safe_remote_error(&parse_error),
+                            )),
+                            CachedRemoteSnapshot::ReadError(cache_error) => diagnostics.push(format!(
+                                "Remote '{}' returned invalid content; skipped because cached content could not be read. Reason: {}; cache error: {}",
+                                safe_remote_name(&remote.name),
+                                safe_remote_error(&parse_error),
+                                safe_remote_error(&cache_error),
+                            )),
+                            CachedRemoteSnapshot::ParseError(cache_error) => diagnostics.push(format!(
+                                "Remote '{}' returned invalid content; skipped because cached content is also invalid. Reason: {}; cache error: {}",
+                                safe_remote_name(&remote.name),
+                                safe_remote_error(&parse_error),
+                                safe_remote_error(&cache_error),
+                            )),
+                        }
+                    }
+                },
+                Err(download_error) => {
+                    let cache = read_cached_snapshot(
+                        profile_host,
+                        remote,
+                        multi_remote,
+                    )
+                    .await;
+                    match cache {
+                        CachedRemoteSnapshot::Parsed(snapshot) => {
+                            diagnostics.push(format!(
+                                "Remote '{}' download failed; using cached content. Reason: {}",
+                                safe_remote_name(&remote.name),
+                                safe_remote_error(&download_error),
+                            ));
+                            retain_remote_snapshot(&mut snapshots, snapshot);
+                        }
+                        CachedRemoteSnapshot::Missing => diagnostics.push(format!(
+                            "Remote '{}' download failed; skipped because no cached content is available. Reason: {}",
+                            safe_remote_name(&remote.name),
+                            safe_remote_error(&download_error),
+                        )),
+                        CachedRemoteSnapshot::ReadError(cache_error) => diagnostics.push(format!(
+                            "Remote '{}' download failed; skipped because cached content could not be read. Reason: {}; cache error: {}",
+                            safe_remote_name(&remote.name),
+                            safe_remote_error(&download_error),
+                            safe_remote_error(&cache_error),
+                        )),
+                        CachedRemoteSnapshot::ParseError(cache_error) => diagnostics.push(format!(
+                            "Remote '{}' download failed; skipped because cached content is invalid. Reason: {}; cache error: {}",
+                            safe_remote_name(&remote.name),
+                            safe_remote_error(&download_error),
+                            safe_remote_error(&cache_error),
+                        )),
+                    }
+                }
+            }
+            continue;
+        }
+
+        match read_cached_snapshot(profile_host, remote, multi_remote).await {
+            CachedRemoteSnapshot::Parsed(snapshot) => retain_remote_snapshot(&mut snapshots, snapshot),
+            CachedRemoteSnapshot::Missing => diagnostics.push(format!(
+                "Remote '{}' has no cached content; skipped.",
+                safe_remote_name(&remote.name)
+            )),
+            CachedRemoteSnapshot::ReadError(error) => diagnostics.push(format!(
+                "Remote '{}' cached content could not be read; skipped. Reason: {}",
+                safe_remote_name(&remote.name),
+                safe_remote_error(&error)
+            )),
+            CachedRemoteSnapshot::ParseError(error) => diagnostics.push(format!(
+                "Remote '{}' cached content is invalid; skipped. Reason: {}",
+                safe_remote_name(&remote.name),
+                safe_remote_error(&error)
+            )),
+        }
+    }
+
+    Ok(RemoteCollection {
+        snapshots,
+        diagnostics,
+    })
+}
+
+async fn read_cached_snapshot(
+    profile_host: &ProfileHost,
+    remote: &ProfileRemote,
+    multi_remote: bool,
+) -> CachedRemoteSnapshot {
+    let content = match profile_host.read_remote_raw(&remote.url).await {
+        Ok(Some(content)) => content,
+        Ok(None) => return CachedRemoteSnapshot::Missing,
+        Err(error) => return CachedRemoteSnapshot::ReadError(error),
+    };
+
+    match parse_remote(&remote_source(remote), &content, multi_remote) {
+        Ok(snapshot) => CachedRemoteSnapshot::Parsed(snapshot),
+        Err(error) => CachedRemoteSnapshot::ParseError(error),
+    }
+}
+
+fn retain_remote_snapshot(snapshots: &mut Vec<RemoteSnapshot>, snapshot: RemoteSnapshot) {
+    for warning in &snapshot.warnings {
+        log::warn!("{warning}");
+    }
+    snapshots.push(snapshot);
+}
+
+pub(crate) fn safe_remote_name(name: &str) -> String {
+    let name: String = name
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(80)
+        .collect();
+    if name.trim().is_empty() {
+        String::from("unnamed")
+    } else {
+        safe_remote_error(&name)
+            .chars()
+            .take(80)
+            .collect()
+    }
+}
+
+pub(crate) fn safe_remote_error(error: &str) -> String {
+    let mut sanitized = error
+        .split_whitespace()
+        .map(|token| {
+            if token.contains("://") {
+                String::from("[redacted URL]")
+            } else {
+                token.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    for marker in [
+        "token=",
+        "access_token=",
+        "api_key=",
+        "password=",
+        "secret=",
+        "authorization=",
+        "authorization:",
+        "cookie:",
+        "x-api-key:",
+    ] {
+        let lower = sanitized.to_ascii_lowercase();
+        let Some(start) = lower.find(marker) else {
+            continue;
+        };
+        let value_start = start + marker.len();
+        let value_end = sanitized[value_start..]
+            .find(char::is_whitespace)
+            .map(|offset| value_start + offset)
+            .unwrap_or(sanitized.len());
+        sanitized.replace_range(value_start..value_end, "[redacted]");
+    }
+
+    sanitized = sanitized.chars().take(240).collect();
+    if sanitized.is_empty() {
+        String::from("unspecified error")
+    } else {
+        sanitized
     }
 }
 
@@ -377,69 +614,22 @@ pub async fn update_profile_runtime(
                 .map(|item| item.content.clone())
                 .ok_or_else(|| String::from("Profile references a missing Template."))?
         };
-        let remotes = profile.remotes.clone();
-        let multi_remote = remotes.len() > 1;
-        let mut downloaded_by_url: HashMap<String, Result<String, String>> = HashMap::new();
-        let mut saved_urls = HashSet::new();
-        let mut snapshots = Vec::new();
-        for remote in &remotes {
-            let downloaded = if let Some(downloaded) = downloaded_by_url.get(&remote.url) {
-                downloaded.clone()
-            } else {
-                let downloaded = remote_downloads
-                    .download(&remote.url, &remote.headers)
-                    .await;
-                downloaded_by_url.insert(remote.url.clone(), downloaded.clone());
-                downloaded
-            };
-            let content = match downloaded {
-                Ok(content) => {
-                    if saved_urls.insert(remote.url.clone()) {
-                        profile_host.save_remote_raw(&remote.url, &content).await?;
-                    }
-                    log::info!(
-                        "Remote fetch succeeded: profile_id={} remote={} url={}",
-                        profile.id,
-                        remote.name,
-                        remote.url
-                    );
-                    content
-                }
-                Err(error) => {
-                    log::warn!(
-                        "Remote fetch failed: profile_id={} remote={} url={} error={error}; attempting to use the most recent raw cache",
-                        profile.id,
-                        remote.name,
-                        remote.url
-                    );
-                    let Some(cached) = profile_host
-                        .read_remote_raw(&remote.url)
-                        .await?
-                    else {
-                        return Err(format!(
-                            "Remote {} refresh failed and no cache is available: {error}",
-                            remote.name
-                        ));
-                    };
-                    cached
-                }
-            };
-            let snapshot = parse_remote(&remote_source(remote), &content, multi_remote).map_err(
-                |err| {
-                    format!("Failed to parse raw cache for Remote {}: {err}", remote.name)
-                },
-            )?;
-            for warning in &snapshot.warnings {
-                log::warn!("{warning}");
-            }
-            snapshots.push(snapshot);
-        }
-        build_config(&template, snapshots, profile.hook.as_deref()).map_err(
+        let collection = collect_remote_snapshots(&profile, &profile_host, Some(&remote_downloads))
+            .await?;
+        let diagnostics = collection.diagnostics;
+        build_config(
+            &template,
+            collection.snapshots,
+            profile.hook.as_deref(),
+            profile.remotes.len() > 1,
+        )
+        .map(|content| (content, diagnostics))
+        .map_err(
                 |error| {
                     log::error!(
                         "Failed to generate Profile runtime configuration: profile_id={} remotes={} error={error}",
                         profile.id,
-                        remotes.len()
+                        profile.remotes.len()
                     );
                     error
                 },
@@ -471,7 +661,7 @@ pub async fn update_profile_runtime(
         == Some(profile.id.as_str());
 
     match result {
-        Ok(content) => {
+        Ok((content, diagnostics)) => {
             guard
                 .profile_host
                 .save_runtime(&profile.id, &content)
@@ -480,7 +670,7 @@ pub async fn update_profile_runtime(
                 let target = &mut guard.controller.state.gui_config.profiles[index];
                 target.updated_at = now;
                 target.last_attempt_at = now;
-                target.last_update_error = None;
+                target.last_update_error = (!diagnostics.is_empty()).then(|| diagnostics.join("\n"));
                 target.next_update_at = next_update_at;
             }
             guard

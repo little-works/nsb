@@ -14,6 +14,7 @@ use crate::config::AppLanguage;
 use crate::hosts::{ServerHost, TrayHost};
 
 pub use runtime::{GuiRuntime, SharedGuiRuntime, update_profile_runtime};
+pub(crate) use runtime::safe_remote_error;
 
 #[derive(Debug, Clone)]
 pub enum AppAction {

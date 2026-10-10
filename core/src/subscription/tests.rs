@@ -294,7 +294,8 @@ fn assembles_multiple_remotes_into_ordered_selectors_and_keeps_route_rule_order(
     );
 
     let config: Value =
-        serde_json::from_str(&build_config(template, vec![first, second], None).unwrap()).unwrap();
+        serde_json::from_str(&build_config(template, vec![first, second], None, true).unwrap())
+            .unwrap();
     let tags: Vec<_> = config["outbounds"]
         .as_array()
         .unwrap()
@@ -343,7 +344,7 @@ fn assembles_multiple_remotes_into_ordered_selectors_and_keeps_route_rule_order(
 #[test]
 fn keeps_empty_remote_selectors_without_direct_fallback() {
     let zero: Value = serde_json::from_str(
-        &build_config(r#"{"outbounds":[]}"#, Vec::new(), None).unwrap(),
+        &build_config(r#"{"outbounds":[]}"#, Vec::new(), None, false).unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -362,6 +363,7 @@ fn keeps_empty_remote_selectors_without_direct_fallback() {
                 None,
             )],
             None,
+            false,
         )
         .unwrap(),
     )
@@ -379,6 +381,7 @@ fn keeps_empty_remote_selectors_without_direct_fallback() {
                 snapshot_named("second", Vec::new(), Vec::new(), Vec::new(), None),
             ],
             None,
+            true,
         )
         .unwrap(),
     )
@@ -390,6 +393,40 @@ fn keeps_empty_remote_selectors_without_direct_fallback() {
             {"type":"selector","tag":"second","outbounds":[]},
             {"type":"selector","tag":"PROXY","outbounds":["first","second"]}
         ])
+    );
+
+    let filtered: Value = serde_json::from_str(
+        &build_config(
+            r#"{"outbounds":[]}"#,
+            vec![snapshot_named(
+                "surviving",
+                vec![json!({"type":"shadowsocks", "tag":"node"})],
+                Vec::new(),
+                Vec::new(),
+                None,
+            )],
+            None,
+            true,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        filtered["outbounds"],
+        json!([
+            {"type":"shadowsocks", "tag":"node"},
+            {"type":"selector","tag":"surviving","outbounds":["node"]},
+            {"type":"selector","tag":"PROXY","outbounds":["surviving"]}
+        ])
+    );
+
+    let all_filtered: Value = serde_json::from_str(
+        &build_config(r#"{"outbounds":[]}"#, Vec::new(), None, true).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        all_filtered["outbounds"],
+        json!([{"type":"selector","tag":"PROXY","outbounds":[]}])
     );
 }
 
@@ -411,6 +448,7 @@ fn preserves_proxy_fields_and_removes_invalid_default_for_multiple_remotes() {
                 snapshot_named("second", Vec::new(), Vec::new(), Vec::new(), None),
             ],
             None,
+            true,
         )
         .unwrap(),
     )
@@ -445,6 +483,7 @@ fn rejects_multiple_remote_selector_name_collisions() {
             snapshot_named("same", Vec::new(), Vec::new(), Vec::new(), None),
         ],
         None,
+        true,
     )
     .unwrap_err();
     assert!(duplicate.contains("duplicate name 'same'"));
@@ -456,6 +495,7 @@ fn rejects_multiple_remote_selector_name_collisions() {
             snapshot_named("other", Vec::new(), Vec::new(), Vec::new(), None),
         ],
         None,
+        true,
     )
     .unwrap_err();
     assert!(reserved.contains("name 'direct' is reserved"));
@@ -467,6 +507,7 @@ fn rejects_multiple_remote_selector_name_collisions() {
             snapshot_named("other", Vec::new(), Vec::new(), Vec::new(), None),
         ],
         None,
+        true,
     )
     .unwrap_err();
     assert!(outbound_conflict.contains("conflicts with an existing outbound tag"));
@@ -484,6 +525,7 @@ fn creates_proxy_selector_when_template_has_none() {
                 None,
             )],
             None,
+            false,
         )
         .unwrap(),
     )
@@ -524,6 +566,7 @@ fn deduplicates_outbounds_by_tag_or_untagged_value_and_excludes_direct_block_fro
                 None,
             )],
             None,
+            false,
         )
         .unwrap(),
     )
@@ -569,7 +612,8 @@ fn recursively_merges_preserved_fields_in_remote_order_and_appends_arrays() {
     second.experimental = Some(json!({"cache_file": {"path": "second.db"}}));
 
     let config: Value =
-        serde_json::from_str(&build_config(template, vec![first, second], None).unwrap()).unwrap();
+        serde_json::from_str(&build_config(template, vec![first, second], None, true).unwrap())
+            .unwrap();
 
     assert_eq!(config["dns"]["final"], "second");
     assert_eq!(

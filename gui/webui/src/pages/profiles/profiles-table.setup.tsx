@@ -159,16 +159,27 @@ export default __render<ProfilesTableProps>(() => {
                   >
                     {hasAttempt ? (
                       updateFailed ? (
-                        <span
-                          aria-label={t('profiles.lastAttemptFailed')}
-                          class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs outline-none
-                            focus-visible:ring-2 focus-visible:ring-error"
-                          tabindex={0}
+                        <Tooltip
+                          content={
+                            item.last_update_error ??
+                            t('profiles.lastAttemptFailed')
+                          }
+                          contentClass="whitespace-pre-line text-left break-words"
                         >
-                          <Icon class="text-xs text-error">
-                            <CancelOutlined />
-                          </Icon>
-                        </span>
+                          <span
+                            aria-label={
+                              item.last_update_error ??
+                              t('profiles.lastAttemptFailed')
+                            }
+                            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs outline-none
+                              focus-visible:ring-2 focus-visible:ring-error"
+                            tabindex={0}
+                          >
+                            <Icon class="text-xs text-error">
+                              <CancelOutlined />
+                            </Icon>
+                          </span>
+                        </Tooltip>
                       ) : (
                         <Icon
                           aria-label={t('profiles.lastAttemptSucceeded')}

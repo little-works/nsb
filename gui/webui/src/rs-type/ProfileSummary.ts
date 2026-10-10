@@ -6,4 +6,5 @@ export type ProfileSummary = {
   updated_at: number;
   last_attempt_at: number;
   last_update_failed: boolean;
+  last_update_error: string | null;
 };

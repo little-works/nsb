@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::app::update_profile_runtime;
+use crate::app::{safe_remote_error, update_profile_runtime};
 use crate::routes::RouteState;
 use crate::state::{ProfileItem, ProfileRemote};
 
@@ -24,6 +24,7 @@ pub struct ProfileSummary {
     pub updated_at: u64,
     pub last_attempt_at: u64,
     pub last_update_failed: bool,
+    pub last_update_error: Option<String>,
 }
 
 /// The editable Profile representation exposed by the HTTP API.
@@ -91,6 +92,10 @@ impl From<&ProfileItem> for ProfileSummary {
             updated_at: profile.updated_at,
             last_attempt_at: profile.last_attempt_at,
             last_update_failed: profile.last_update_error.is_some(),
+            last_update_error: profile
+                .last_update_error
+                .as_deref()
+                .map(safe_remote_error),
         }
     }
 }
@@ -281,7 +286,7 @@ pub async fn import_profile(
                     profile.template_id = String::new();
                     profile.inline_template = Some(content.clone());
                 }
-                match nsb_core::build_config(&content, Vec::new(), None) {
+                match nsb_core::build_config(&content, Vec::new(), None, false) {
                     Ok(runtime) => {
                         if let Err(error) =
                             guard.profile_host.save_runtime(created_id, &runtime).await
@@ -638,9 +643,10 @@ mod tests {
         let value = serde_json::to_value(summary).expect("summary serializes");
 
         assert_eq!(value["last_update_failed"], true);
-        for secret in ["token", "Authorization", "hook", "last_update_error"] {
+        for secret in ["Authorization", "hook"] {
             assert!(value.get(secret).is_none(), "summary exposed {secret}");
         }
+        assert_eq!(value["last_update_error"], "request failed: token=[redacted]");
         assert!(!value.to_string().contains("secret"));
     }
 }

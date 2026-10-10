@@ -1,9 +1,9 @@
 use log::{info, warn};
 use std::str::FromStr;
 
-use nsb_core::{build_config, parse_remote};
+use nsb_core::build_config;
 
-use crate::app::runtime::remote_source;
+use crate::app::runtime::collect_remote_snapshots;
 use crate::config::{AppConfig, AppConfigStore, AppLanguage};
 use crate::hosts::system_proxy_host::SystemProxyHost;
 use crate::hosts::{ProfileHost, SingBoxHost};
@@ -609,34 +609,18 @@ impl AppController {
                 .map(|item| item.content.clone())
                 .ok_or_else(|| String::from("Profile references a missing Template."))?
         };
-        let multi_remote = profile.remotes.len() > 1;
-        let mut snapshots = Vec::new();
-
-        for remote in &profile.remotes {
-            let cached = profile_host
-                .read_remote_raw(&remote.url)
-                .await?
-                .ok_or_else(|| {
-                    format!(
-                        "Remote {} has no cached content. Refresh the Profile before starting the kernel.",
-                        remote.name
-                    )
-                })?;
-            let snapshot = parse_remote(&remote_source(remote), &cached, multi_remote).map_err(
-                |error| {
-                    format!(
-                        "Failed to parse cached Remote {} before starting the kernel: {error}",
-                        remote.name
-                    )
-                },
-            )?;
-            for warning in &snapshot.warnings {
-                warn!("{warning}");
-            }
-            snapshots.push(snapshot);
+        let collection = collect_remote_snapshots(profile, profile_host, None).await?;
+        for diagnostic in &collection.diagnostics {
+            warn!("Profile {} remote update diagnostic: {diagnostic}", profile.id);
         }
 
-        let content = build_config(&template, snapshots, profile.hook.as_deref()).map_err(
+        let content = build_config(
+            &template,
+            collection.snapshots,
+            profile.hook.as_deref(),
+            profile.remotes.len() > 1,
+        )
+        .map_err(
             |error| {
                 log::error!(
                     "Failed to generate Profile runtime configuration before kernel start: profile_id={} remotes={} error={error}",

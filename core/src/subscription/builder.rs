@@ -10,6 +10,7 @@ pub fn build_config(
     template: &str,
     mut remotes: Vec<RemoteSnapshot>,
     hook: Option<&str>,
+    multi_remote: bool,
 ) -> Result<String, String> {
     let mut config: Value = serde_json::from_str(template)
         .map_err(|error| format!("Failed to parse Template sing-box configuration: {error}"))?;
@@ -18,7 +19,6 @@ pub fn build_config(
             "Template sing-box configuration must be a JSON object.",
         ));
     }
-    let multi = remotes.len() > 1;
     let hook_remotes = remotes.clone();
     let mut outbounds = config
         .get("outbounds")
@@ -30,7 +30,7 @@ pub fn build_config(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let remote_selectors = if multi {
+    let remote_selectors = if multi_remote {
         validate_remote_selectors(&outbounds, &remotes)?;
         remotes.iter().map(remote_selector).collect()
     } else {
@@ -60,7 +60,7 @@ pub fn build_config(
         .collect();
     outbounds.append(&mut source_nodes);
     outbounds.append(&mut source_groups);
-    if multi {
+    if multi_remote {
         outbounds.extend(remote_selectors);
         let members: Vec<String> = remotes.iter().map(|remote| remote.name.clone()).collect();
         match outbounds.iter_mut().find(|item| tag(item) == Some("PROXY")) {
@@ -91,7 +91,7 @@ pub fn build_config(
     }
     if let Some(source) = hook.filter(|source| !source.trim().is_empty()) {
         let mut input = json!({"singbox": config});
-        if multi {
+        if multi_remote {
             input["remotes"] =
                 serde_json::to_value(hook_remotes).map_err(|error| error.to_string())?;
         } else if let Some(remote) = hook_remotes.into_iter().next() {
