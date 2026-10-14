@@ -88,10 +88,10 @@ jobs:
           $outputDir = (Resolve-Path -LiteralPath '.' -ErrorAction Stop).Path
 
           & $iscc `
-            "--define=AppVersion=$env:PACKAGE_VERSION" `
-            "--define=AppExe=$executable" `
-            "--define=AppIcon=$icon" `
-            "--define=OutputDir=$outputDir" `
+            "/DAppVersion=$env:PACKAGE_VERSION" `
+            "/DAppExe=$executable" `
+            "/DAppIcon=$icon" `
+            "/DOutputDir=$outputDir" `
             $script
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup compiler failed with exit code $LASTEXITCODE"
