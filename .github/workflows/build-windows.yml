@@ -1,119 +1,26 @@
 name: Build (Windows)
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build:
-    name: Windows (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-2025
-
+    runs-on: windows-2025
+    env:
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Enable pnpm
-        run: corepack enable
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v6
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install WebUI dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build WebUI
-        run: pnpm --dir gui/webui run build
-
-      - name: Build Windows GUI
-        run: cargo build -p nsb-gui --release
-
-      - name: Read nsb-gui package version
-        id: package-version
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go tool mygo vet .
+      - name: Build native desktop and installer
         shell: pwsh
-        run: |
-          $metadataJson = cargo metadata --no-deps --format-version 1
-          if ($LASTEXITCODE -ne 0) {
-            throw "cargo metadata failed with exit code $LASTEXITCODE"
-          }
-
-          $metadata = $metadataJson | ConvertFrom-Json
-          $packages = @($metadata.packages | Where-Object { $_.name -eq 'nsb-gui' })
-          if ($packages.Count -ne 1) {
-            throw "Expected exactly one nsb-gui package in cargo metadata, found $($packages.Count)"
-          }
-
-          $version = [string]$packages[0].version
-          if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "nsb-gui package version is empty"
-          }
-
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Package Windows artifact
-        shell: pwsh
-        run: |
-          $archive = "NSB-windows-${{ matrix.arch }}.zip"
-          $stage = Join-Path $env:RUNNER_TEMP "NSB-windows-${{ matrix.arch }}"
-          New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item target/release/nsb.exe $stage
-          Compress-Archive -Path (Join-Path $stage 'nsb.exe') -DestinationPath $archive -Force
-
-      - name: Build Windows installer
-        shell: pwsh
-        env:
-          PACKAGE_VERSION: ${{ steps.package-version.outputs.version }}
-        run: |
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path -LiteralPath $iscc -PathType Leaf)) {
-            throw "Inno Setup compiler was not found at '$iscc'"
-          }
-
-          if ([string]::IsNullOrWhiteSpace($env:PACKAGE_VERSION)) {
-            throw 'The nsb-gui package version was not provided to the installer compiler'
-          }
-
-          $executable = (Resolve-Path -LiteralPath 'target/release/nsb.exe' -ErrorAction Stop).Path
-          $icon = (Resolve-Path -LiteralPath 'gui/assets/nsb.ico' -ErrorAction Stop).Path
-          $script = (Resolve-Path -LiteralPath 'gui/installer/nsb.iss' -ErrorAction Stop).Path
-          $outputDir = (Resolve-Path -LiteralPath '.' -ErrorAction Stop).Path
-
-          & $iscc `
-            "/DAppVersion=$env:PACKAGE_VERSION" `
-            "/DAppExe=$executable" `
-            "/DAppIcon=$icon" `
-            "/DOutputDir=$outputDir" `
-            $script
-          if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup compiler failed with exit code $LASTEXITCODE"
-          }
-
-          $installer = Join-Path $outputDir 'NSB-windows-x64-setup.exe'
-          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-            throw "Expected installer was not created at '$installer'"
-          }
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v7
+        run: go tool mygo build -platform windows/amd64 .
+      - uses: actions/upload-artifact@v7
         with:
-          name: NSB-windows-${{ matrix.arch }}
-          path: NSB-windows-${{ matrix.arch }}.zip
-          archive: false
-          if-no-files-found: error
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v7
-        with:
-          name: NSB-windows-${{ matrix.arch }}-setup
-          path: NSB-windows-${{ matrix.arch }}-setup.exe
-          archive: false
+          name: NSB-windows-x64
+          path: dist/windows-amd64/*.exe
           if-no-files-found: error

@@ -1,0 +1,8 @@
+{
+  "name": "NSB",
+  "identifier": "com.little-works.nsb",
+  "version": "0.1.0",
+  "main": "./gui/cmd/nsb",
+  "icon": "gui/assets/nsb-logo.png",
+  "out": "dist"
+}

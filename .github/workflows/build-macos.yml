@@ -1,54 +1,32 @@
 name: Build (macOS)
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build:
-    name: macOS (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - arch: x64
-            runner: macos-15-intel
-          - arch: arm64
-            runner: macos-15
-
+          - runner: macos-15-intel
+            arch: amd64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Enable pnpm
-        run: corepack enable
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v6
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install WebUI dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build WebUI
-        run: pnpm --dir gui/webui run build
-
-      - name: Build macOS GUI
-        run: cargo build -p nsb-gui --release
-
-      - name: Set up mise
-        uses: jdx/mise-action@v3
-
-      - name: Package macOS artifact
-        run: mise run package-macos-app
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v7
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go tool mygo vet .
+      - run: bash scripts/package-macos.sh
+      - uses: actions/upload-artifact@v7
         with:
           name: NSB-macos-${{ matrix.arch }}
-          path: NSB-macos-${{ matrix.arch }}.zip
+          path: dist/NSB-macos-${{ matrix.arch }}.zip
           archive: false
           if-no-files-found: error

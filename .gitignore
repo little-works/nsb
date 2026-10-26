@@ -13,13 +13,19 @@ node_modules
 /tmp
 
 # Private AI/editor workflow files
-/.agents/
 /.codex/
 /.trellis/
 /.zed/
-/AGENTS.md
 /HANDOFF.md
 /task.md
 /skills-lock.json
 /._nsb/
 gui/dev-config/
+
+# Go build output
+/build/
+*.test
+*.syso
+/nsb-server
+/nsb-server.exe
+/nsb.exe

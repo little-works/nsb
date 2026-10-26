@@ -1,7 +1,0 @@
-packages:
-  - gui/webui
-allowBuilds:
-  esbuild: false
-  lefthook: true
-  opencode-ai: true
-  vue-demi: false

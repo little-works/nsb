@@ -1,26 +1,20 @@
 [tools]
-node = "24"
+go = "1.27.3"
 
 [tasks.dev]
-env = { NSB_WEBUI_PORT = "3100" }
-run = { tasks = ["dev-desktop", "dev-webui"] }
+run = "go run ./gui/cmd/nsb --dev"
 
-[tasks.dev-desktop]
-run = "watchexec -w ./gui/src -w ./core/src -e rs -i target --shell=none -r -- cargo run -p nsb-gui"
+[tasks.test]
+run = "go test ./..."
 
-[tasks.dev-webui]
-run = "cd gui/webui && pnpm run dev"
-
-[tasks.build-webui]
-run = "cd gui/webui && pnpm run build"
+[tasks.vet]
+run = "go tool mygo vet ."
 
 [tasks.build-gui]
-run = [
-    {
-      task = "build-webui",
-    },
-    "cargo build -p nsb-gui --release"
-]
+run = "go tool mygo build -platform windows/amd64 ."
+
+[tasks.build-server]
+run = "go build -o dist/nsb-server ./server/cmd/nsb-server"
 
 [tasks.package-macos-app]
-run = "node scripts/package-macos-app.mjs"
+run = "bash scripts/package-macos.sh"
