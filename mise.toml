@@ -1,3 +1,6 @@
+[env]
+GOPROXY = "https://goproxy.cn,direct"
+
 [tools]
 go = "1.27.3"
 
