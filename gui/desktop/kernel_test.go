@@ -14,6 +14,52 @@ import (
 	"nsb/core"
 )
 
+func TestClearLogsPreservesFileAndShowsNewRecords(t *testing.T) {
+	dir := t.TempDir()
+	m, err := Open(filepath.Join(dir, "config"), filepath.Join(dir, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ClearLogs(); err != nil {
+		t.Fatal(err)
+	}
+	path := m.kernel.LogPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("INFO old record\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ClearLogs(); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.kernel.LogTail(); got != "" {
+		t.Fatalf("old records remain: %q", got)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.WriteString("INFO new record\n")
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.kernel.LogTail(); got != "INFO new record\n" {
+		t.Fatalf("new record missing: %q", got)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || string(body) != "INFO old record\nINFO new record\n" {
+		t.Fatalf("disk log changed: %q, %v", body, err)
+	}
+	if err := os.WriteFile(path, []byte("reset\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.kernel.LogTail(); got != "reset\n" {
+		t.Fatalf("truncated log missing: %q", got)
+	}
+}
+
 // The test executable doubles as a local sing-box process without network access.
 func TestMain(m *testing.M) {
 	if os.Getenv("NSB_TEST_KERNEL") == "1" && len(os.Args) > 1 {
@@ -88,6 +134,34 @@ func helperKernel(t *testing.T) *Kernel {
 	t.Cleanup(func() { _ = k.Shutdown() })
 	return k
 }
+func TestManagerStartsKernelWithRelativeDirectories(t *testing.T) {
+	k := helperKernel(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(cwd, k.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := Open(filepath.Join(relative, "config"), relative)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = m.Shutdown() })
+	if !filepath.IsAbs(m.store.ConfigDir) || !filepath.IsAbs(m.store.DataDir) || !filepath.IsAbs(m.kernel.Binary()) {
+		t.Fatal("manager paths must be absolute")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := m.kernel.Start(ctx, core.DefaultTemplate, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if !m.kernel.Running() || !strings.Contains(m.kernel.LogTail(), "test kernel started") {
+		t.Fatal("relative directories must support kernel startup and log capture")
+	}
+}
+
 func TestKernelLifecycleAndAdoption(t *testing.T) {
 	k := helperKernel(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

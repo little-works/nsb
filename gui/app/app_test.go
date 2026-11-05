@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,55 @@ func TestProfileTypingPersistsAcrossFrames(t *testing.T) {
 		t.Fatal("editor did not rebuild")
 	}
 }
+func TestCompactProfileForm(t *testing.T) {
+	a := testApp(t)
+	a.page = "profiles"
+	a.snapshot.Config.Templates = []core.Template{{ID: "t", Name: "Default", Content: core.DefaultTemplate}}
+	a.editor = newProfileEditor(core.Profile{ID: "p", Name: "Profile", TemplateID: "t", Remotes: []core.Remote{{Name: "Source", Format: "clash"}}}, a.snapshot.Config)
+	view := ui.NewTester(a.profileEditorView, 960-232, 650)
+	for _, language := range []string{"zh-CN", "en-US"} {
+		a.language = language
+		view.SetLocale(language)
+		for _, width := range []int{960, 1180, 1920} {
+			view.SetSize(width-232, 650)
+			view.Frame()
+			view.Frame()
+			for _, pair := range [][2]string{
+				{a.t("Name", "名称"), a.t("Template", "模板")},
+				{a.t("Update interval (hours)", "更新间隔（小时）"), "Cron"},
+				{a.t("Source name", "来源名称"), a.t("Format", "格式")},
+			} {
+				left, leftOK := view.Find(pair[0])
+				right, rightOK := view.Find(pair[1])
+				if !leftOK || !rightOK || math.Abs(float64(left.Y-right.Y)) > 1 || left.X+left.W >= right.X {
+					t.Fatalf("%s width=%v fields not side by side: %v, %+v, %+v", language, width, pair, left, right)
+				}
+			}
+		}
+	}
+	box, ok := view.Find("URL")
+	if !ok {
+		t.Fatal("source URL missing")
+	}
+	view.ClickAt(box.X+80, box.Y+box.H/2)
+	view.Type("https://example.com/sub")
+	view.Frame()
+	view.Frame()
+	if a.editor.Remotes[0].Remote.URL != "https://example.com/sub" {
+		t.Fatal("source URL edit lost")
+	}
+	click(t, view, "Use inline template")
+	view.Frame()
+	if a.editor.Profile.InlineTemplate == nil || !view.HasText("Inline sing-box template (JSON)") {
+		t.Fatal("inline template did not open")
+	}
+	click(t, view, "Use a saved template")
+	view.Frame()
+	if a.editor.Profile.InlineTemplate != nil || a.editor.TemplateName != "Default" {
+		t.Fatal("saved template did not return")
+	}
+}
+
 func TestAllNativePagesRender(t *testing.T) {
 	a := testApp(t)
 	a.language = "zh-CN"
@@ -203,6 +253,66 @@ func TestCodeEditorSync(t *testing.T) {
 	}
 }
 
+func TestNarrowConnectionActionVisible(t *testing.T) {
+	a := testApp(t)
+	a.page = "connections"
+	a.snapshot.Running = true
+	a.snapshot.Connections = core.Object{"connections": []any{core.Object{"id": "conn", "metadata": core.Object{"host": "example.com"}}}}
+	view := ui.NewTester(a.View, 960, 650)
+	for _, language := range []string{"zh-CN", "en-US"} {
+		a.language = language
+		view.SetLocale(language)
+		view.Frame()
+		view.Frame()
+		bounds, ok := view.Find(a.t("Close", "关闭"))
+		if !ok || bounds.X < 232 || bounds.X+bounds.W > 960-28 {
+			t.Fatalf("%s connection action clipped: %+v, found=%v", language, bounds, ok)
+		}
+	}
+}
+
+func TestThemeTextContrast(t *testing.T) {
+	luminance := func(color ui.Color) float64 {
+		linear := func(value uint8) float64 {
+			v := float64(value) / 255
+			if v <= .04045 {
+				return v / 12.92
+			}
+			return math.Pow((v+.055)/1.055, 2.4)
+		}
+		return .2126*linear(color.R) + .7152*linear(color.G) + .0722*linear(color.B)
+	}
+	var theme ui.Theme
+	view := ui.NewTester(func(c *ui.Context) {
+		setAppTheme(c)
+		theme = *c.Theme()
+	}, 200, 100)
+	for _, dark := range []bool{false, true} {
+		view.SetDark(dark)
+		view.Frame()
+		for _, pair := range []struct {
+			name       string
+			text, base ui.Color
+		}{
+			{"body", theme.Text, theme.Background},
+			{"secondary", theme.TextMuted, theme.Surface},
+			{"selected secondary", theme.TextMuted, theme.SurfacePressed},
+			{"primary", theme.AccentText, theme.Accent},
+			{"primary hover", theme.AccentText, theme.AccentHover},
+			{"primary pressed", theme.AccentText, theme.AccentPressed},
+			{"info", theme.Accent, theme.Surface},
+			{"warning", theme.Warning, theme.Surface},
+			{"error", theme.Danger, theme.Surface},
+		} {
+			lo, hi := luminance(pair.text), luminance(pair.base)
+			contrast := (max(lo, hi) + .05) / (min(lo, hi) + .05)
+			if contrast < 4.5 {
+				t.Errorf("dark=%v %s contrast %.2f < 4.5", dark, pair.name, contrast)
+			}
+		}
+	}
+}
+
 func TestProxyGroupsAndColumns(t *testing.T) {
 	a := testApp(t)
 	id := "p"
@@ -246,6 +356,86 @@ func TestLogFiltering(t *testing.T) {
 		t.Fatal("unchecked levels must not appear", got)
 	}
 }
+func TestLongStatusKeepsPageUsable(t *testing.T) {
+	a := testApp(t)
+	a.status = strings.Repeat("kernel startup failed: long error output\n", 300)
+	a.snapshot.Logs = "FATAL port already in use"
+	view := ui.NewTester(a.View, 960, 700)
+	view.Frame()
+	status, ok := view.Find("Status message")
+	if !ok || status.H > 56 || status.Y < 600 || status.Y+status.H > 700 {
+		t.Fatalf("status must remain bounded at the bottom: %+v", status)
+	}
+	search, ok := view.Find("搜索节点或代理组…")
+	if !ok || search.Y+search.H > status.Y {
+		t.Fatal("status obscured page controls")
+	}
+	click(t, view, "查看日志")
+	if a.page != "logs" || !view.HasText("FATAL port already in use") {
+		t.Fatal("log details must remain accessible")
+	}
+}
+
+func TestPageToolbarsShareAlignment(t *testing.T) {
+	a := testApp(t)
+	view := ui.NewTester(a.View, 1180, 820)
+	for _, size := range [][2]int{{960, 700}, {1180, 820}, {1920, 1080}} {
+		view.SetSize(size[0], size[1])
+		var x, y float32
+		for i, page := range []struct{ name, search string }{
+			{"proxies", "搜索节点或代理组…"}, {"profiles", "搜索订阅"},
+			{"templates", "搜索模板…"}, {"logs", "筛选日志"},
+			{"connections", "搜索域名、进程或代理链…"},
+		} {
+			a.page = page.name
+			view.Frame()
+			view.Frame()
+			r, ok := view.Find(page.search)
+			if !ok || r.W != 360 || r.H != 36 {
+				t.Fatalf("%s search has inconsistent size at %v: %+v", page.name, size, r)
+			}
+			if i == 0 {
+				x, y = r.X, r.Y
+			} else if r.X != x || r.Y != y {
+				t.Fatalf("%s toolbar is misaligned at %v: %+v", page.name, size, r)
+			}
+		}
+	}
+}
+
+func TestLogToolbarStaysVisibleAndClears(t *testing.T) {
+	a := testApp(t)
+	a.page = "logs"
+	a.snapshot.Logs = strings.Repeat("INFO log record\n", 200)
+	view := ui.NewTester(a.View, 1180, 820)
+	view.Frame()
+	before, ok := view.Find("清空")
+	if !ok {
+		t.Fatal("clear action missing")
+	}
+	viewport, ok := view.Find("Page content")
+	if !ok || before.Y+before.H > viewport.Y {
+		t.Fatal("toolbar must be above the scrolling log body")
+	}
+	border, ok := view.Find("Log panel")
+	if !ok || viewport.Y <= border.Y || viewport.Y+viewport.H >= border.Y+border.H {
+		t.Fatal("log viewport must stay inside panel borders")
+	}
+	view.Scroll(viewport.X+100, viewport.Y+100, 0, 500)
+	view.Frame()
+	after, ok := view.Find("清空")
+	if !ok || before != after {
+		t.Fatal("toolbar moved with log content")
+	}
+	if afterBorder, ok := view.Find("Log panel"); !ok || afterBorder != border {
+		t.Fatal("log panel borders moved with content")
+	}
+	click(t, view, "清空")
+	if a.snapshot.Logs != "" || view.HasText("INFO log record") {
+		t.Fatal("clear action retained old records")
+	}
+}
+
 func TestLogCheckboxes(t *testing.T) {
 	a := testApp(t)
 	a.page = "logs"
@@ -292,7 +482,7 @@ func TestPageScrollViewportsReachWindowEdge(t *testing.T) {
 	a.snapshot.Logs = "INFO started"
 	a.snapshot.Connections = core.Object{"connections": []any{core.Object{"id": "connection", "metadata": core.Object{"host": "example.com"}}}}
 	view := ui.NewTester(a.View, 1920, 1080)
-	for _, page := range []string{"profiles", "templates", "settings", "logs", "profile-editor"} {
+	for _, page := range []string{"profiles", "templates", "settings", "profile-editor"} {
 		a.editor = nil
 		a.page = page
 		if page == "profile-editor" {

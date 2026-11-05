@@ -7,12 +7,12 @@ Go + MyGo native 的 sing-box 桌面管理器，当前聚焦 Windows 复刻。�
 开发环境需要 Go 1.27.1 或更高版本。
 
 ```sh
-go run ./gui/cmd/nsb --dev
+go tool mygo dev .
 go test ./...
 go tool mygo vet .
 ```
 
-`--dev` 使用 `gui/dev-config` 和 `gui/dev-data`，正式运行读取 `~/.config/nsb/app-config.json` 和 `~/.nsb`。也可通过 `--config-dir`、`--data-dir` 指定隔离目录。
+`mise run dev` 执行 `go tool mygo dev .`，代码变化后自动重编译并重启应用。开发模式通过 `mygo.IsDev()` 判断，使用 `gui/dev-config` 和 `gui/dev-data`；生产构建读取 `~/.config/nsb/app-config.json` 和 `~/.nsb`。可通过 `--dev` 覆盖开发模式，或通过 `--config-dir`、`--data-dir` 指定隔离目录。
 
 应用包含代理、订阅、模板、日志、连接、设置六个页面，支持内核下载与本地导入、测速、托盘、自启动、系统代理和定时更新。关闭窗口隐藏到托盘，通过托盘退出。代码编辑使用 MyGo 原生代码编辑器，支持语法高亮、行号和查找。系统代理配置支持 Windows。
 

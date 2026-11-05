@@ -227,24 +227,24 @@ func (a *App) startWorkers() {
 func (a *App) View(c *ui.Context) {
 	setAppTheme(c)
 	ui.Row(c).Fill().Background(c.Theme().Background).Children(func() {
-		ui.Column(c).Width(232).FillHeight().Padding(16).Gap(18).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+		ui.Column(c).Width(232).FillHeight().Padding(16).Gap(24).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 			ui.Row(c).Padding(8, 4).Gap(12).AlignItems(ui.Center).Children(func() {
 				if logo != nil {
-					ui.Image(c, logo).Size(42, 42).Radius(10)
+					ui.Image(c, logo).Size(36, 36).Radius(8)
 				}
-				ui.Column(c).Gap(4).Children(func() { ui.Text(c, "Not Sing-Box").FontSize(17).FontWeight(700); muted(c, "NSB  /  "+appVersion()) })
+				ui.Column(c).Gap(4).Children(func() { ui.Text(c, "Not Sing-Box").FontSize(16).FontWeight(600); muted(c, appVersion()) })
 			})
 			ui.Sidebar(c, &a.page, func() {
 				for _, p := range []struct{ id, en, zh string }{{"proxies", "Proxies", "代理"}, {"profiles", "Profiles", "订阅"}, {"templates", "Templates", "模板"}, {"logs", "Logs", "日志"}, {"connections", "Connections", "连接"}, {"settings", "Settings", "设置"}} {
-					ui.SidebarItem(c, p.id, icons[p.id], a.t(p.en, p.zh)).Height(43).Radius(8)
+					ui.SidebarItem(c, p.id, icons[p.id], a.t(p.en, p.zh)).Height(42).Radius(6).Padding(10, 12).Gap(12)
 				}
 			}).FillWidth().Grow(1).Padding(0).Gap(5).Background(ui.Transparent).OnChange(func() { a.runtimeID = ""; a.editor = nil; a.template = nil; a.code = nil })
-			panel(c).Padding(14).Gap(12).Children(func() {
+			panel(c).Padding(14).Gap(12).Background(c.Theme().Background).Children(func() {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					color := c.Theme().TextMuted
 					state := a.t("Stopped", "未运行")
 					if a.snapshot.Running {
-						color = ui.Hex("#20a779")
+						color = c.Theme().Success
 						state = a.t("Running", "运行中")
 					}
 					ui.Box(c).Size(7, 7).Radius(4).Background(color)
@@ -256,11 +256,11 @@ func (a *App) View(c *ui.Context) {
 				ui.Divider(c)
 				ui.Row(c).FillWidth().Children(func() {
 					ui.Column(c).Grow(1).Gap(5).Children(func() {
-						muted(c, a.t("UPLOAD", "上传速率"))
+						muted(c, a.t("Upload", "上传速率"))
 						ui.Text(c, fmt.Sprintf("↑ %.1f KB/s", a.snapshot.UploadRate/1024)).FontSize(13)
 					})
 					ui.Column(c).Grow(1).Gap(5).Children(func() {
-						muted(c, a.t("DOWNLOAD", "下载速率"))
+						muted(c, a.t("Download", "下载速率"))
 						ui.Text(c, fmt.Sprintf("↓ %.1f KB/s", a.snapshot.DownloadRate/1024)).FontSize(13)
 					})
 				})
@@ -270,14 +270,14 @@ func (a *App) View(c *ui.Context) {
 		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Gap(20).Children(func() {
 			header := ui.Row(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(28, 28, 0, 28).AlignItems(ui.Center).Gap(12)
 			header.Children(func() {
-				ui.Column(c).Grow(1).Gap(7).Children(func() { ui.Text(c, a.pageTitle()).FontSize(25).FontWeight(700); muted(c, a.pageSubtitle()) })
+				ui.Text(c, a.pageTitle()).FontSize(22).FontWeight(600).Grow(1)
 				if a.busy {
 					ui.Spinner(c).Size(16, 16)
 				}
 				if id := a.snapshot.Config.CurrentProfileID; id != nil {
 					for _, p := range a.snapshot.Config.Profiles {
 						if p.ID == *id {
-							ui.Badge(c, p.Name).Padding(6, 11).TextColor(c.Theme().Accent)
+							ui.Badge(c, p.Name).Padding(6, 10).Background(c.Theme().SurfacePressed).TextColor(c.Theme().Accent)
 							break
 						}
 					}
@@ -303,27 +303,16 @@ func (a *App) View(c *ui.Context) {
 			})
 			if a.status != "" && a.status != a.t("Done", "已完成") {
 				ui.Column(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(0, 28, 16, 28).Children(func() {
-					ui.Row(c).FillWidth().Padding(10, 14).Background(c.Theme().Surface).Radius(8).Gap(10).Children(func() { muted(c, a.status).Wrap() })
+					ui.Row(c).FillWidth().Padding(10, 14).Background(c.Theme().Surface).Radius(8).Gap(10).AlignItems(ui.Center).Label("Status message").Children(func() {
+						muted(c, a.status).Grow(1).MinWidth(0).SingleLine()
+						if a.page != "logs" && a.snapshot.Logs != "" {
+							ui.Button(c, a.t("View logs", "查看日志")).OnClick(func() { a.page = "logs" })
+						}
+					})
 				})
 			}
 		})
 	})
-}
-func (a *App) pageSubtitle() string {
-	switch a.page {
-	case "profiles":
-		return a.t("Organize your subscriptions and keep sources up to date.", "管理订阅来源，组合配置，保持节点更新。")
-	case "templates":
-		return a.t("Reusable configurations for all your subscriptions.", "管理可复用的基础配置，为订阅定义统一规则。")
-	case "logs":
-		return a.t("Live output from your sing-box kernel.", "查看 sing-box 内核的运行日志与诊断信息。")
-	case "connections":
-		return a.t("Inspect the traffic flowing through your proxies.", "查看实时连接、流量与代理链路。")
-	case "settings":
-		return a.t("Make NSB work the way you like.", "调整常规偏好，管理内核与应用数据。")
-	default:
-		return a.t("Select a proxy and manage routing mode.", "管理代理分组、节点与路由模式。")
-	}
 }
 func (a *App) pageTitle() string {
 	switch a.page {

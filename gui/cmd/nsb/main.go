@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	dev := flag.Bool("dev", false, "use gui/dev-config and gui/dev-data")
+	dev := flag.Bool("dev", mygo.IsDev(), "use gui/dev-config and gui/dev-data")
 	configDir := flag.String("config-dir", "", "configuration directory")
 	dataDir := flag.String("data-dir", "", "data directory")
 	flag.Parse()

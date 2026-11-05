@@ -110,11 +110,11 @@ func (a *App) profilesView(c *ui.Context) {
 		a.profileEditorView(c)
 		return
 	}
-	ui.Column(c).Fill().Gap(14).Children(func() {
+	ui.Column(c).Fill().Gap(16).Children(func() {
 		pageToolbar(c).Children(func() {
-			ui.SearchField(c, &a.profileFilter).Label(a.t("Search subscriptions", "搜索订阅")).Width(360).MaxWidth(420).Height(35)
+			ui.SearchField(c, &a.profileFilter).Label(a.t("Search subscriptions", "搜索订阅")).Width(360).MaxWidth(420).Height(36)
 			ui.Spacer(c)
-			ui.PrimaryButton(c, a.t("New profile", "新建订阅")).OnClick(func() {
+			ui.PrimaryButton(c, a.t("New profile", "新建订阅")).Height(36).OnClick(func() {
 				p := core.Profile{ID: core.NewID(), Name: a.t("New profile", "新订阅"), Remotes: []core.Remote{}}
 				if len(a.snapshot.Config.Templates) > 0 {
 					p.TemplateID = a.snapshot.Config.Templates[0].ID
@@ -124,7 +124,7 @@ func (a *App) profilesView(c *ui.Context) {
 				}
 				a.editor = newProfileEditor(p, a.snapshot.Config)
 			})
-			ui.Button(c, a.t("Update all", "更新全部")).OnClick(func() {
+			ui.Button(c, a.t("Update all", "更新全部")).Height(36).OnClick(func() {
 				a.run(func() (string, error) {
 					for _, p := range a.manager.Config().Profiles {
 						if _, e := a.manager.Generate(a.ctx, p.ID, true); e != nil {
@@ -136,10 +136,10 @@ func (a *App) profilesView(c *ui.Context) {
 			})
 		})
 		pageScroll(c).Children(func() {
-			pageContent(c).Gap(10).Children(func() {
+			pageContent(c).Gap(12).Children(func() {
 				if len(a.snapshot.Config.Profiles) == 0 {
 					panel(c).Children(func() {
-						emptyState(c, icons["profiles"], a.t("Your subscriptions live here", "开始管理你的订阅"), a.t("Create a profile or import an archive in Settings.", "新建订阅，或在设置中导入旧版备份。"))
+						emptyState(c, icons["profiles"], a.t("No profiles", "暂无订阅"), a.t("Create a profile or import an archive in Settings.", "新建订阅，或在设置中导入备份。"))
 					})
 				}
 				for _, p := range a.snapshot.Config.Profiles {
@@ -147,14 +147,18 @@ func (a *App) profilesView(c *ui.Context) {
 						continue
 					}
 					c.Key(p.ID)
-					panel(c).Padding(14, 18).Gap(8).Children(func() {
-						active := a.snapshot.Config.CurrentProfileID != nil && *a.snapshot.Config.CurrentProfileID == p.ID
+					active := a.snapshot.Config.CurrentProfileID != nil && *a.snapshot.Config.CurrentProfileID == p.ID
+					border := c.Theme().Border
+					if active {
+						border = c.Theme().Accent
+					}
+					panel(c).Padding(16, 18).Gap(8).BorderColor(border).Children(func() {
 						ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
 							ui.Column(c).Grow(1).MinWidth(0).Gap(5).Children(func() {
 								ui.Row(c).Gap(8).Children(func() {
 									ui.Text(c, p.Name).FontWeight(600).FontSize(15)
 									if active {
-										ui.Badge(c, a.t("Active", "当前使用")).TextColor(c.Theme().Accent)
+										ui.Badge(c, a.t("Active", "当前使用")).Background(c.Theme().SurfacePressed).TextColor(c.Theme().Accent)
 									}
 								})
 								info := fmt.Sprintf(a.t("%d sources", "%d 个来源"), len(p.Remotes))
@@ -240,35 +244,62 @@ func (a *App) profileEditorView(c *ui.Context) {
 		pageScroll(c).Children(func() {
 			pageContent(c).Children(func() {
 				panel(c).Gap(12).Children(func() {
-					section(c, icons["profiles"], a.t("Profile configuration", "订阅配置"), a.t("Define your sources and generation rules.", "设置订阅来源与配置生成规则。"))
+					section(c, icons["profiles"], a.t("Profile configuration", "订阅配置"))
 					ui.Divider(c)
-					field(c, a.t("Name", "名称"), &e.Profile.Name)
+					ui.Row(c).FillWidth().Gap(16).AlignItems(ui.End).Children(func() {
+						ui.Column(c).Grow(1).MinWidth(0).MaxWidth(320).Gap(6).Children(func() {
+							field(c, a.t("Name", "名称"), &e.Profile.Name)
+						})
+						if e.Profile.InlineTemplate == nil {
+							ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
+								ui.Text(c, a.t("Template", "模板")).FontSize(13).FontWeight(500)
+								options := []string{}
+								for _, t := range a.snapshot.Config.Templates {
+									options = append(options, t.Name)
+								}
+								ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+									ui.Select(c, &e.TemplateName, options).Grow(1).MinWidth(0).Height(36).Label(a.t("Template", "模板"))
+									ui.Button(c, a.t("Use inline template", "使用内联模板")).OnClick(func() { v := core.DefaultTemplate; e.Profile.InlineTemplate = &v })
+								})
+							})
+						}
+					})
 					if e.Profile.InlineTemplate != nil {
 						ui.Text(c, a.t("Inline sing-box template (JSON)", "内联 sing-box 模板（JSON）"))
 						a.codeEditor(c, "inline-template", e.Profile.InlineTemplate, "json").Height(200).FillWidth()
 						if len(a.snapshot.Config.Templates) > 0 {
 							ui.Button(c, a.t("Use a saved template", "改用已有模板")).OnClick(func() { e.Profile.InlineTemplate = nil; e.TemplateName = a.snapshot.Config.Templates[0].Name })
 						}
-					} else {
-						ui.Text(c, a.t("Template", "模板"))
-						options := []string{}
-						for _, t := range a.snapshot.Config.Templates {
-							options = append(options, t.Name)
-						}
-						ui.Select(c, &e.TemplateName, options).FillWidth()
-						ui.Button(c, a.t("Use inline template", "使用内联模板")).OnClick(func() { v := core.DefaultTemplate; e.Profile.InlineTemplate = &v })
 					}
 					ui.Divider(c)
-					field(c, a.t("Update interval (hours, blank disables)", "更新间隔（小时，留空禁用）"), &e.Interval)
-					field(c, a.t("Cron (seconds minutes hours day month weekday; overrides interval)", "Cron（秒 分 时 日 月 星期，优先于间隔）"), &e.Cron)
+					ui.Row(c).FillWidth().Gap(16).Children(func() {
+						ui.Column(c).Width(180).Gap(6).Children(func() {
+							field(c, a.t("Update interval (hours)", "更新间隔（小时）"), &e.Interval)
+						})
+						ui.Column(c).Grow(1).MinWidth(0).MaxWidth(420).Gap(6).Children(func() {
+							field(c, "Cron", &e.Cron)
+						})
+					})
+					muted(c, a.t("Blank disables updates. Cron: second minute hour day month weekday; overrides interval.", "留空禁用自动更新。Cron：秒 分 时 日 月 星期，优先于间隔。")).Wrap()
 					ui.Divider(c)
-					section(c, icons["connections"], a.t("Subscription sources", "订阅来源"), a.t("Sources are combined in the order shown below.", "来源按照下方顺序组合，可自由调整。"))
+					section(c, icons["connections"], a.t("Subscription sources", "订阅来源"))
+					muted(c, a.t("Combined in the order shown.", "按下方顺序组合。"))
 					for _, r := range e.Remotes {
 						c.Key(r.ID)
-						panel(c).Padding(16).Gap(10).Children(func() {
-							field(c, a.t("Source name", "来源名称"), &r.Remote.Name)
-							field(c, "URL", &r.Remote.URL)
-							ui.Select(c, &r.Remote.Format, []string{"clash", "singbox", "links"}).FillWidth()
+						panel(c).Padding(16).Gap(10).Background(c.Theme().Background).Children(func() {
+							ui.Row(c).FillWidth().Gap(16).Children(func() {
+								ui.Column(c).Grow(1).MinWidth(0).MaxWidth(320).Gap(6).Children(func() {
+									field(c, a.t("Source name", "来源名称"), &r.Remote.Name)
+								})
+								ui.Column(c).Width(140).Gap(6).Children(func() {
+									ui.Text(c, a.t("Format", "格式")).FontSize(13).FontWeight(500)
+									ui.Select(c, &r.Remote.Format, []string{"clash", "singbox", "links"}).Height(36).FillWidth().Label(a.t("Format", "格式"))
+								})
+							})
+							ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, "URL").FontSize(13).FontWeight(500)
+								ui.TextInput(c, &r.Remote.URL).Grow(1).MinWidth(0).Height(36).Label("URL")
+							})
 							ui.Collapsible(c, a.t("Advanced options", "高级选项"), &r.Advanced, func() {
 								ui.Column(c).FillWidth().Gap(10).Children(func() {
 									muted(c, a.t("Headers (JSON array of key/value)", "请求头（key/value JSON 数组）"))
@@ -294,14 +325,15 @@ func (a *App) profileEditorView(c *ui.Context) {
 										}
 									}
 								})
-							})
-							ui.Button(c, a.t("Remove source", "移除来源")).OnClick(func() {
-								for i, v := range e.Remotes {
-									if v.ID == r.ID {
-										e.Remotes = append(e.Remotes[:i], e.Remotes[i+1:]...)
-										break
+								ui.Spacer(c)
+								ui.Button(c, a.t("Remove source", "移除来源")).OnClick(func() {
+									for i, v := range e.Remotes {
+										if v.ID == r.ID {
+											e.Remotes = append(e.Remotes[:i], e.Remotes[i+1:]...)
+											break
+										}
 									}
-								}
+								})
 							})
 						})
 					}

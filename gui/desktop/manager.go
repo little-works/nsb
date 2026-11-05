@@ -40,6 +40,14 @@ type Manager struct {
 }
 
 func Open(configDir, dataDir string) (*Manager, error) {
+	configDir, err := filepath.Abs(configDir)
+	if err != nil {
+		return nil, fmt.Errorf("configuration directory: %w", err)
+	}
+	dataDir, err = filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("data directory: %w", err)
+	}
 	s := &core.Store{ConfigDir: configDir, DataDir: dataDir}
 	c, e := s.Load()
 	if e != nil {
@@ -413,6 +421,21 @@ func (m *Manager) ImportKernel(ctx context.Context, path string) error {
 	}
 	return m.replaceKernel(ctx, func() error { return m.kernel.Install(ctx, binary) })
 }
+func (m *Manager) ClearLogs() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info, err := os.Stat(m.kernel.LogPath())
+	if errors.Is(err, os.ErrNotExist) {
+		m.kernel.logOffset = 0
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	m.kernel.logOffset = info.Size()
+	return nil
+}
+
 func (m *Manager) ReadVersion(ctx context.Context) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

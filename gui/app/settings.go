@@ -12,21 +12,26 @@ import (
 
 func preference(c *ui.Context, title, description string, control func()) {
 	ui.Row(c).FillWidth().Gap(24).AlignItems(ui.Center).Padding(2, 0).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() { ui.Text(c, title).FontSize(14).FontWeight(500); muted(c, description).Wrap() })
+		ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
+			ui.Text(c, title).FontSize(14).FontWeight(500)
+			if description != "" {
+				muted(c, description).Wrap()
+			}
+		})
 		control()
 	})
 }
 func (a *App) settingsView(c *ui.Context) {
 	pageScroll(c).Children(func() {
-		pageContent(c).Gap(20).Children(func() {
+		pageContent(c).Gap(16).Children(func() {
 			panel(c).Children(func() {
-				section(c, icons["settings"], a.t("General", "常规偏好"), a.t("Desktop behavior and network integration.", "调整桌面行为与网络设置。"))
+				section(c, icons["settings"], a.t("General", "常规偏好"))
 				ui.Divider(c)
-				preference(c, a.t("System proxy", "系统代理"), a.t("Route system traffic through the active mixed inbound.", "通过当前订阅的 mixed 入站接管系统代理。"), func() {
+				preference(c, a.t("System proxy", "系统代理"), a.t("Use the active profile's HTTP / SOCKS port.", "使用当前订阅的 HTTP / SOCKS 端口。"), func() {
 					ui.Switch(c, &a.proxy).Label(a.t("System proxy", "系统代理")).OnChange(func() { on := a.proxy; a.saveConfig(func(cfg *core.Config) { cfg.SystemProxyEnabled = on }) })
 				})
 				ui.Divider(c)
-				preference(c, a.t("Start at login", "开机自启动"), a.t("Launch NSB when you sign in to Windows.", "登录 Windows 时自动启动 NSB。"), func() {
+				preference(c, a.t("Start at login", "开机自启动"), "", func() {
 					ui.Switch(c, &a.startup).Label(a.t("Start at login", "开机自启动")).OnChange(func() {
 						if e := mygo.App.SetOpenAtLogin(a.startup); e != nil {
 							a.status = e.Error()
@@ -35,7 +40,7 @@ func (a *App) settingsView(c *ui.Context) {
 					})
 				})
 				ui.Divider(c)
-				preference(c, a.t("Language", "显示语言"), a.t("Choose the language used throughout the app.", "选择应用界面使用的语言。"), func() {
+				preference(c, a.t("Language", "显示语言"), "", func() {
 					if a.languageSource != a.language {
 						a.languageSource = a.language
 						a.languageChoice = 0
@@ -51,9 +56,9 @@ func (a *App) settingsView(c *ui.Context) {
 				})
 			})
 			panel(c).Children(func() {
-				section(c, icons["templates"], a.t("Appearance", "外观"), a.t("A comfortable workspace, day and night.", "为白天和夜晚选择舒适的界面。"))
+				section(c, icons["appearance"], a.t("Appearance", "外观"))
 				ui.Divider(c)
-				preference(c, a.t("Theme", "主题模式"), a.t("Follow Windows or pick your preferred appearance.", "跟随系统，或选择你喜欢的外观。"), func() {
+				preference(c, a.t("Theme", "主题模式"), "", func() {
 					if a.themeSource != a.theme {
 						a.themeSource = a.theme
 						a.themeChoice = 0
@@ -73,7 +78,7 @@ func (a *App) settingsView(c *ui.Context) {
 				})
 			})
 			panel(c).Children(func() {
-				section(c, icons["power"], a.t("sing-box kernel", "sing-box 内核"), a.t("The engine powering your connection.", "为网络连接提供支持的核心引擎。"))
+				section(c, icons["kernel"], a.t("sing-box kernel", "sing-box 内核"))
 				ui.Divider(c)
 				preference(c, a.t("Kernel version", "内核版本"), func() string {
 					version := strings.Split(a.snapshot.Version, "\n")[0]
@@ -92,7 +97,7 @@ func (a *App) settingsView(c *ui.Context) {
 				}
 			})
 			panel(c).Children(func() {
-				section(c, icons["file"], a.t("Data management", "数据管理"), a.t("Keep a backup or bring your existing configuration.", "备份你的配置，或从旧版导入数据。"))
+				section(c, icons["archive"], a.t("Data management", "数据管理"))
 				ui.Divider(c)
 				preference(c, a.t("Profiles & templates", "订阅与模板"), a.t("Compatible with NSB portable data v1 archives.", "兼容 NSB portable data v1 备份文件。"), func() {
 					ui.Row(c).Gap(8).Children(func() {

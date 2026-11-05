@@ -34,6 +34,7 @@ type Kernel struct {
 	proxy                        systemProxy
 	running                      bool
 	startedAt                    time.Time
+	logOffset                    int64
 }
 
 var controllerClient = &http.Client{Timeout: 7 * time.Second, Transport: &http.Transport{Proxy: nil}}
@@ -224,7 +225,7 @@ func (k *Kernel) Start(ctx context.Context, body, hook string, proxy bool) error
 		case e := <-k.done:
 			k.running = false
 			_ = os.Remove(k.workspace("pid.txt"))
-			return fmt.Errorf("kernel exited during startup: %v; %s", e, k.LogTail())
+			return fmt.Errorf("kernel exited during startup: %v (see kernel logs)", e)
 		case <-ctx.Done():
 			_ = k.Stop()
 			return ctx.Err()
@@ -334,8 +335,13 @@ func (k *Kernel) LogTail() string {
 	if e != nil {
 		return ""
 	}
-	if info.Size() > 64<<10 {
+	if info.Size() < k.logOffset {
+		k.logOffset = 0
+	}
+	if info.Size()-k.logOffset > 64<<10 {
 		_, _ = f.Seek(-(64 << 10), io.SeekEnd)
+	} else {
+		_, _ = f.Seek(k.logOffset, io.SeekStart)
 	}
 	b, _ := io.ReadAll(f)
 	return string(b)

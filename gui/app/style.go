@@ -13,64 +13,75 @@ import (
 var logo, _ = ui.DecodeBitmap(assets.Icon)
 
 func svg(path string) *ui.SVG {
-	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">` + path + `</svg>`))
+	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` + path + `</svg>`))
 }
 
 var icons = map[string]*ui.SVG{
-	"proxies":     svg(`<path d="M4 13a8 8 0 0 1 16 0v5H4zM12 13l4-5"/><circle cx="12" cy="13" r="1"/>`),
-	"profiles":    svg(`<path d="M4 7h16M4 12h16M4 17h10"/><circle cx="19" cy="17" r="2"/>`),
-	"templates":   svg(`<path d="m12 3 9 5-9 5-9-5 9-5zm-9 9 9 5 9-5M3 16l9 5 9-5"/>`),
+	"proxies":     svg(`<circle cx="6" cy="17" r="3"/><circle cx="18" cy="7" r="3"/><path d="M6 14V7a3 3 0 0 1 3-3h2m7 6v7a3 3 0 0 1-3 3h-2M9 17l6-10"/>`),
+	"profiles":    svg(`<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8m-8 4h5m-5 4h3"/><circle cx="16" cy="16" r="1"/>`),
+	"templates":   svg(`<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16m-10 0v10M8 7h.01m3 0h.01"/>`),
 	"logs":        svg(`<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/>`),
-	"connections": svg(`<circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 12h5V5h5m-5 7v7h5"/>`),
-	"settings":    svg(`<path d="M5 4v16m7-16v16m7-16v16M2 8h6m1 8h6m1-9h6"/><circle cx="5" cy="8" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="19" cy="7" r="2"/>`),
-	"refresh":     svg(`<path d="M20 7v5h-5M4 17v-5h5m-4-5a8 8 0 0 1 13-2l2 2M4 17l2 2a8 8 0 0 0 13-2"/>`),
-	"power":       svg(`<path d="M12 3v9m-6-7a9 9 0 1 0 12 0"/>`),
-	"file":        svg(`<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zm0 0v6h6M8 13h8m-8 4h5"/>`),
+	"connections": svg(`<rect x="3" y="9" width="5" height="6" rx="1.5"/><rect x="16" y="3" width="5" height="6" rx="1.5"/><rect x="16" y="15" width="5" height="6" rx="1.5"/><path d="M8 12h4m4-6h-4v12h4"/>`),
+	"settings":    svg(`<path d="M4 7h4m4 0h8M4 17h8m4 0h4"/><circle cx="10" cy="7" r="2"/><circle cx="14" cy="17" r="2"/>`),
+	"refresh":     svg(`<path d="M20 4v5h-5M4 20v-5h5m-4.2-6a7.5 7.5 0 0 1 12.4-3L20 9M4 15l2.8 3A7.5 7.5 0 0 0 19.2 15"/>`),
+	"appearance":  svg(`<rect x="3" y="4" width="18" height="13" rx="3"/><path d="M9 21h6m-3-4v4M12 4v13"/>`),
+	"kernel":      svg(`<rect x="6" y="6" width="12" height="12" rx="3"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/>`),
+	"archive":     svg(`<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9m-9 4h4"/>`),
 	"check":       svg(`<path d="m5 12 4 4L19 6"/>`),
 }
 
 func setAppTheme(c *ui.Context) {
 	t := *c.Theme()
-	t.Radius = 7
+	t.Radius = 6
 	t.FontSize = 14
 	t.Spacing = 4
+	t.Font = "Segoe UI"
 	if strings.HasPrefix(c.Locale(), "zh") {
 		t.Font = "Microsoft YaHei UI"
 	}
 	if t.Dark {
-		t.Background = ui.Hex("#101722")
-		t.Surface = ui.Hex("#192230")
-		t.SurfaceHover = ui.Hex("#243249")
-		t.SurfacePressed = ui.Hex("#2b3e5b")
-		t.Border = ui.Hex("#2b3749")
-		t.Text = ui.Hex("#e6edf7")
-		t.TextMuted = ui.Hex("#94a4ba")
-		t.Accent = ui.Hex("#7caaff")
-		t.AccentText = ui.Hex("#10213c")
+		t.Background = ui.Hex("#152129")
+		t.Surface = ui.Hex("#1D2D36")
+		t.SurfaceHover = ui.Hex("#283F49")
+		t.SurfacePressed = ui.Hex("#304E57")
+		t.Border = ui.Hex("#3B515D")
+		t.Text = ui.Hex("#E5EDF0")
+		t.TextMuted = ui.Hex("#AEC0CA")
+		t.Accent = ui.Hex("#65D4CF")
+		t.AccentHover = ui.Hex("#8AE3DE")
+		t.AccentPressed = ui.Hex("#4BBDB8")
+		t.AccentText = ui.Hex("#102C32")
+		t.Success = ui.Hex("#7AD6AC")
+		t.Warning = ui.Hex("#EDBD72")
+		t.Danger = ui.Hex("#FF9AA5")
 	} else {
-		t.Background = ui.Hex("#f4f6fb")
-		t.Surface = ui.Hex("#ffffff")
-		t.SurfaceHover = ui.Hex("#edf3ff")
-		t.SurfacePressed = ui.Hex("#e2ebfc")
-		t.Border = ui.Hex("#e0e6f0")
-		t.Text = ui.Hex("#1c2940")
-		t.TextMuted = ui.Hex("#77859a")
-		t.Accent = ui.Hex("#2463ce")
-		t.AccentText = ui.Hex("#ffffff")
+		t.Background = ui.Hex("#F5F7F8")
+		t.Surface = ui.Hex("#FFFFFF")
+		t.SurfaceHover = ui.Hex("#EAF3F3")
+		t.SurfacePressed = ui.Hex("#DCECEC")
+		t.Border = ui.Hex("#D5DFE3")
+		t.Text = ui.Hex("#223442")
+		t.TextMuted = ui.Hex("#566977")
+		t.Accent = ui.Hex("#007F86")
+		t.AccentHover = ui.Hex("#006D74")
+		t.AccentPressed = ui.Hex("#005C63")
+		t.AccentText = ui.Hex("#FFFFFF")
+		t.Success = ui.Hex("#237A57")
+		t.Warning = ui.Hex("#936018")
+		t.Danger = ui.Hex("#BC3549")
 	}
-	t.AccentHover = t.Accent
-	t.AccentPressed = t.Accent
 	t.Focus = t.Accent
+	t.Selection = t.Accent.Alpha(.24)
 	c.SetTheme(&t)
 }
 func panel(c *ui.Context) ui.Element {
-	return ui.Column(c).FillWidth().Padding(20).Gap(14).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(12)
+	return ui.Column(c).FillWidth().Padding(20).Gap(16).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10)
 }
 func pageContent(c *ui.Context) ui.Element {
 	return ui.Column(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(0, 28, 28, 28)
 }
 func pageToolbar(c *ui.Context) ui.Element {
-	return ui.Row(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(0, 28).Gap(10)
+	return ui.Row(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(0, 28).Gap(12).AlignItems(ui.Center)
 }
 func pageScroll(c *ui.Context) ui.Element {
 	return ui.Scroll(c).FillWidth().Grow(1).MinHeight(0).Label("Page content")
@@ -80,27 +91,22 @@ func muted(c *ui.Context, s string) ui.Element {
 }
 func iconButton(c *ui.Context, icon *ui.SVG, label string) ui.Element {
 	return ui.Button(c, "").Label(label).Gap(7).Children(func() {
-		ui.Icon(c, icon).Size(15, 15)
+		ui.Icon(c, icon).Size(16, 16)
 		if label != "" {
 			ui.Text(c, label)
 		}
 	})
 }
-func section(c *ui.Context, icon *ui.SVG, title, description string) {
-	ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, icon).Size(20, 20).TextColor(c.Theme().Accent)
-		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, title).FontSize(16).FontWeight(600)
-			if description != "" {
-				muted(c, description).Wrap()
-			}
-		})
+func section(c *ui.Context, icon *ui.SVG, title string) {
+	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Icon(c, icon).Size(20, 20).TextColor(c.Theme().TextMuted)
+		ui.Text(c, title).FontSize(16).FontWeight(600)
 	})
 }
 func emptyState(c *ui.Context, icon *ui.SVG, title, description string) {
 	ui.Column(c).FillWidth().Padding(36).Gap(12).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, icon).Size(38, 38).TextColor(c.Theme().TextMuted)
-		ui.Text(c, title).FontSize(17).FontWeight(600)
+		ui.Icon(c, icon).Size(32, 32).TextColor(c.Theme().TextMuted)
+		ui.Text(c, title).FontSize(16).FontWeight(600)
 		muted(c, description).Wrap().TextAlign(ui.Center)
 	})
 }
