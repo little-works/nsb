@@ -180,13 +180,13 @@ func (a *App) profilesView(c *ui.Context) {
 }
 func (a *App) profileActions(c *ui.Context, p core.Profile, active bool) {
 	ui.Row(c).Gap(6).Children(func() {
-		ui.Button(c, a.t("Use", "使用")).Disabled(active).OnClick(func() { a.run(func() (string, error) { return "", a.manager.Activate(a.ctx, p.ID) }, nil) })
-		ui.Button(c, a.t("Update", "更新")).OnClick(func() { a.run(func() (string, error) { return a.manager.Generate(a.ctx, p.ID, true) }, nil) })
-		ui.Button(c, a.t("Edit", "编辑")).OnClick(func() { a.editor = newProfileEditor(p, a.snapshot.Config) })
-		ui.Button(c, a.t("Generated config", "生成配置")).OnClick(func() {
+		textIconButton(c, icons["check"], a.t("Use", "使用")).Disabled(active).OnClick(func() { a.run(func() (string, error) { return "", a.manager.Activate(a.ctx, p.ID) }, nil) })
+		textIconButton(c, icons["refresh"], a.t("Update", "更新")).OnClick(func() { a.run(func() (string, error) { return a.manager.Generate(a.ctx, p.ID, true) }, nil) })
+		textIconButton(c, icons["edit"], a.t("Edit", "编辑")).OnClick(func() { a.editor = newProfileEditor(p, a.snapshot.Config) })
+		textIconButton(c, icons["code"], a.t("Generated config", "生成配置")).OnClick(func() {
 			a.run(func() (string, error) { return a.manager.GeneratedConfig(a.ctx, p.ID) }, func(body string) { a.runtimeID = p.ID; a.runtimeText = body })
 		})
-		ui.Button(c, a.t("Delete", "删除")).OnClick(func() {
+		textIconButton(c, icons["delete"], a.t("Delete", "删除")).OnClick(func() {
 			a.confirm(a.t("Delete profile ", "删除订阅 ")+p.Name+"?", func() {
 				if a.snapshot.Running && active {
 					a.status = a.t("Switch to another profile before deleting the active profile.", "请先切换到其他订阅，再删除当前使用的订阅。")

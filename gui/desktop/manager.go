@@ -368,11 +368,15 @@ func (m *Manager) CloseConnection(ctx context.Context, id string) error {
 }
 func (m *Manager) Latency(ctx context.Context, node string) (int, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	k := &Kernel{controller: m.kernel.controller, secret: m.kernel.secret}
+	m.mu.Unlock()
 	var out struct {
 		Delay int `json:"delay"`
 	}
-	e := m.kernel.Request(ctx, "GET", "/proxies/"+escape(node)+"/delay?timeout=5000&url=https%3A%2F%2Fcp.cloudflare.com%2Fgenerate_204", nil, &out)
+	e := k.Request(ctx, "GET", "/proxies/"+escape(node)+"/delay?timeout=5000&url=https%3A%2F%2Fcp.cloudflare.com%2Fgenerate_204", nil, &out)
+	if e == nil && out.Delay <= 0 {
+		e = fmt.Errorf("proxy latency test returned no valid delay")
+	}
 	return out.Delay, e
 }
 func (m *Manager) replaceKernel(ctx context.Context, install func() error) error {

@@ -34,7 +34,17 @@ type App struct {
 	startup                       bool
 	theme                         string
 	progress                      string
-	delays                        map[string]string
+	delays                        map[string]int
+	proxyTesting                  map[string]bool
+	proxySingleCancel             map[string]context.CancelFunc
+	proxyTestSlots                chan struct{}
+	proxyTestCancel               context.CancelFunc
+	proxyTestID                   int
+	proxyTestDone, proxyTestTotal int
+	proxyGroup                    string
+	proxySort                     int
+	proxyHideInvalid              bool
+	proxyJumpGroup, proxyJumpNode string
 	proxyFilter                   string
 	modeChoice                    int
 	modeSource                    string
@@ -56,7 +66,7 @@ func appVersion() string {
 func New(m *desktop.Manager) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := m.Config()
-	return &App{manager: m, ctx: ctx, cancel: cancel, snapshot: desktop.Snapshot{Config: c}, page: "proxies", proxy: c.SystemProxyEnabled, language: c.AppLanguage, theme: c.AppTheme, logLevels: logSelection{true, true, true, true, true, true}, delays: map[string]string{}}
+	return &App{manager: m, ctx: ctx, cancel: cancel, snapshot: desktop.Snapshot{Config: c}, page: "proxies", proxy: c.SystemProxyEnabled, language: c.AppLanguage, theme: c.AppTheme, logLevels: logSelection{true, true, true, true, true, true}, delays: map[string]int{}, proxyTesting: map[string]bool{}, proxySingleCancel: map[string]context.CancelFunc{}, proxyTestSlots: make(chan struct{}, 4)}
 }
 func (a *App) t(en, zh string) string {
 	if a.language == "zh-CN" {
@@ -156,7 +166,7 @@ func (a *App) run(work func() (string, error), done func(string)) {
 				return
 			}
 			a.busy = false
-			a.snapshot = s
+			a.updateSnapshot(s)
 			a.modeSource = ""
 			a.proxy = s.Config.SystemProxyEnabled
 			a.language = s.Config.AppLanguage
@@ -188,7 +198,7 @@ func (a *App) startWorkers() {
 				s := a.manager.Poll(a.ctx)
 				a.window.Update(func() {
 					if !a.busy && !a.quitting {
-						a.snapshot = s
+						a.updateSnapshot(s)
 					}
 				})
 			}
@@ -268,11 +278,14 @@ func (a *App) View(c *ui.Context) {
 			})
 		})
 		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Gap(20).Children(func() {
-			header := ui.Row(c).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(28, 28, 0, 28).AlignItems(ui.Center).Gap(12)
+			header := ui.Row(c).MinHeight(64).FillWidth().MaxWidth(1320).AlignSelf(ui.Center).Padding(28, 28, 0, 28).AlignItems(ui.Center).Gap(12)
 			header.Children(func() {
 				ui.Text(c, a.pageTitle()).FontSize(22).FontWeight(600).Grow(1)
 				if a.busy {
 					ui.Spinner(c).Size(16, 16)
+				}
+				if a.page == "proxies" {
+					a.proxyActions(c)
 				}
 				if id := a.snapshot.Config.CurrentProfileID; id != nil {
 					for _, p := range a.snapshot.Config.Profiles {

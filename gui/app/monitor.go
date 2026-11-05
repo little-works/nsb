@@ -19,27 +19,69 @@ func sortedKeys(o map[string]any) []string {
 	sort.Strings(keys)
 	return keys
 }
+func (a *App) proxyActions(c *ui.Context) {
+	proxies := object(a.snapshot.Proxies["proxies"])
+	groups := a.proxyGroups(proxies)
+	actual := text(a.snapshot.ClashConfig["mode"])
+	if actual != a.modeSource {
+		a.modeSource = actual
+		switch actual {
+		case "global":
+			a.modeChoice = 1
+		case "direct":
+			a.modeChoice = 2
+		default:
+			a.modeChoice = 0
+		}
+	}
+	ui.Segmented(c, &a.modeChoice, a.t("Rule", "规则"), a.t("Global", "全局"), a.t("Direct", "直连")).Label(a.t("Routing mode", "路由模式")).Disabled(!a.snapshot.Running).OnChange(func() {
+		mode := []string{"rule", "global", "direct"}[a.modeChoice]
+		a.run(func() (string, error) { return "", a.manager.Mode(a.ctx, mode) }, nil)
+	})
+	label := a.t("Test all", "全部测速")
+	icon := icons["speed"]
+	if a.proxyTestCancel != nil {
+		label = a.t("Stop testing", "停止测速")
+		icon = icons["stop"]
+		muted(c, fmt.Sprintf("%d / %d", a.proxyTestDone, a.proxyTestTotal))
+	}
+	textIconButton(c, icon, label).Disabled(!a.snapshot.Running).OnClick(func() {
+		if a.proxyTestCancel != nil {
+			a.stopProxyTests()
+			return
+		}
+		nodes := []string{}
+		for _, group := range groups {
+			for _, node := range array(object(proxies[group])["all"]) {
+				nodes = append(nodes, text(node))
+			}
+		}
+		a.testProxies(nodes)
+	})
+}
+
 func (a *App) proxiesView(c *ui.Context) {
+	proxies := object(a.snapshot.Proxies["proxies"])
+	groups := a.proxyGroups(proxies)
 	ui.Column(c).Fill().Gap(16).Children(func() {
 		pageToolbar(c).Children(func() {
-			ui.SearchField(c, &a.proxyFilter).Label(a.t("Search nodes or groups…", "搜索节点或代理组…")).Width(360).MaxWidth(420).Height(36)
-			ui.Spacer(c)
-			actual := text(a.snapshot.ClashConfig["mode"])
-			if actual != a.modeSource {
-				a.modeSource = actual
-				switch actual {
-				case "global":
-					a.modeChoice = 1
-				case "direct":
-					a.modeChoice = 2
-				default:
-					a.modeChoice = 0
+			ui.SearchField(c, &a.proxyFilter).Label(a.t("Search nodes or groups…", "搜索节点或代理组…")).Grow(1).MinWidth(120).MaxWidth(360).Height(36)
+
+			valid := false
+			for _, group := range groups {
+				if group == a.proxyGroup {
+					valid = true
 				}
 			}
-			ui.Segmented(c, &a.modeChoice, a.t("Rule", "规则"), a.t("Global", "全局"), a.t("Direct", "直连")).Label(a.t("Routing mode", "路由模式")).Disabled(!a.snapshot.Running).OnChange(func() {
-				mode := []string{"rule", "global", "direct"}[a.modeChoice]
-				a.run(func() (string, error) { return "", a.manager.Mode(a.ctx, mode) }, nil)
+			if !valid && len(groups) > 0 {
+				a.proxyGroup = groups[0]
+			}
+			ui.Select(c, &a.proxyGroup, groups).Width(140).Height(36).Disabled(!a.snapshot.Running).Label(a.t("Group navigation", "组导航")).OnChange(func() {
+				a.proxyFilter = ""
+				a.proxyJumpGroup, a.proxyJumpNode = a.proxyGroup, ""
 			})
+			ui.Segmented(c, &a.proxySort, a.t("Original", "原序"), a.t("Name", "名称"), a.t("Latency", "延迟")).Label(a.t("Node order", "节点排序"))
+			ui.Checkbox(c, &a.proxyHideInvalid, a.t("Hide failed", "隐藏无效节点"))
 		})
 		if !a.snapshot.Running {
 			pageContent(c).Grow(1).MinHeight(0).Children(func() {
@@ -49,35 +91,47 @@ func (a *App) proxiesView(c *ui.Context) {
 			})
 			return
 		}
-		proxies := object(a.snapshot.Proxies["proxies"])
+
 		width, _ := c.Size()
 		columns := proxyColumns(min(width, 1320))
-		query := strings.ToLower(strings.TrimSpace(a.proxyFilter))
 		shown := 0
 		ui.Scroll(c).Grow(1).FillWidth().Label(a.t("Proxy groups", "代理分组")).Children(func() {
 			pageContent(c).Gap(12).Children(func() {
 				for _, name := range a.proxyGroups(proxies) {
 					group := object(proxies[name])
 					all := array(group["all"])
-					members := []string{}
-					for _, v := range all {
-						node := text(v)
-						if query == "" || strings.Contains(strings.ToLower(name+" "+node), query) {
-							members = append(members, node)
-						}
-					}
-					if len(members) == 0 && query != "" && !strings.Contains(strings.ToLower(name), query) {
+					members := a.proxyMembers(proxies, name)
+					if len(members) == 0 && (len(all) > 0 || strings.TrimSpace(a.proxyFilter) != "") {
 						continue
 					}
 					shown++
 					c.Key(name)
 					panel(c).Children(func() {
-						ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+						header := ui.Row(c).Gap(10).AlignItems(ui.Center)
+						if a.proxyJumpGroup == name && a.proxyJumpNode == "" {
+							header.ScrollIntoView()
+							a.proxyJumpGroup = ""
+						}
+						header.Children(func() {
 							ui.Icon(c, icons["connections"]).Size(20, 20).TextColor(c.Theme().TextMuted)
 							ui.Text(c, name).FontSize(16).FontWeight(600)
-							ui.Badge(c, fmt.Sprint(len(all)))
+							count := fmt.Sprint(len(all))
+							if len(members) != len(all) {
+								count = fmt.Sprintf("%d / %d", len(members), len(all))
+							}
+							ui.Badge(c, count)
 							ui.Spacer(c)
-							muted(c, text(group["type"]))
+							textIconButton(c, icons["locate"], a.t("Locate current in ", "定位当前：")+name).Disabled(text(group["now"]) == "").OnClick(func() {
+								a.proxyFilter = ""
+								a.proxyJumpGroup, a.proxyJumpNode = name, text(group["now"])
+							})
+							textIconButton(c, icons["speed"], a.t("Test group ", "组测速：")+name).Disabled(a.proxyTestCancel != nil || len(all) == 0).OnClick(func() {
+								nodes := []string{}
+								for _, node := range all {
+									nodes = append(nodes, text(node))
+								}
+								a.testProxies(nodes)
+							})
 						})
 						if len(all) == 0 {
 							muted(c, a.t("No available nodes in this group.", "此分组暂无可用节点。"))
@@ -91,11 +145,16 @@ func (a *App) proxiesView(c *ui.Context) {
 									border = c.Theme().Accent
 								}
 								c.Key(node)
-								ui.ButtonBase(c).Height(76).Padding(12, 14).Radius(6).Border(1, border).Background(bg).Label(node).OnClick(func() {
+								card := ui.ButtonBase(c).Height(76).Padding(12, 14).Radius(6).Border(1, border).Background(bg).Label(node).OnClick(func() {
 									if text(group["type"]) == "Selector" {
 										a.run(func() (string, error) { return "", a.manager.SelectProxy(a.ctx, name, node) }, nil)
 									}
-								}).Children(func() {
+								})
+								if a.proxyJumpGroup == name && a.proxyJumpNode == node {
+									card.ScrollIntoView()
+									a.proxyJumpGroup, a.proxyJumpNode = "", ""
+								}
+								card.Children(func() {
 									ui.Column(c).FillWidth().Gap(8).Children(func() {
 										ui.Row(c).Gap(8).Children(func() {
 											ui.Text(c, node).FontWeight(600).Grow(1).SingleLine()
@@ -109,13 +168,17 @@ func (a *App) proxiesView(c *ui.Context) {
 												kind = a.t("Proxy", "代理节点")
 											}
 											muted(c, kind).Grow(1)
-											delay := a.delays[node]
-											if delay != "" {
-												ui.Text(c, delay).FontSize(12).TextColor(c.Theme().Success)
+											delay, tested := a.delays[node]
+											if a.proxyTesting[node] {
+												muted(c, a.t("Testing…", "测速中…"))
+											} else if tested {
+												if delay > 0 {
+													ui.Text(c, fmt.Sprintf("%d ms", delay)).FontSize(12).TextColor(c.Theme().Success)
+												} else {
+													ui.Text(c, a.t("Failed", "失败")).FontSize(12).TextColor(c.Theme().Danger)
+												}
 											}
-											ui.Button(c, a.t("Test", "测速")).FontSize(11).Padding(3, 8).OnClick(func() {
-												a.run(func() (string, error) { ms, e := a.manager.Latency(a.ctx, node); return fmt.Sprintf("%d ms", ms), e }, func(v string) { a.delays[node] = v })
-											})
+											textIconButton(c, icons["speed"], a.t("Test ", "测速：")+node).Size(24, 24).Disabled(a.proxyTesting[node]).OnClick(func() { a.testProxy(node) })
 										})
 									})
 								})

@@ -161,8 +161,8 @@ func TestAllNativePagesRender(t *testing.T) {
 	}
 	a.snapshot.Proxies = core.Object{"proxies": proxies}
 	a.snapshot.ClashConfig = core.Object{"mode": "rule"}
-	a.delays[nodes[0].(string)] = "42 ms"
-	a.delays[nodes[2].(string)] = "68 ms"
+	a.delays[nodes[0].(string)] = 42
+	a.delays[nodes[2].(string)] = 68
 	a.snapshot.Connections = core.Object{"connections": []any{core.Object{"id": "conn1", "metadata": core.Object{"host": "www.example.com", "destinationPort": "443", "network": "tcp", "process": "msedge.exe"}, "upload": 102400.0, "download": 12600000.0, "chains": []any{"日本 · 东京 01", "PROXY"}}}}
 	a.snapshot.Logs = "2026-10-26  DEBUG  router: loading rules\n2026-10-26  INFO  sing-box started\n2026-10-26  WARN  outbound: connection timeout, retrying\n2026-10-26  ERROR  dns: query failed\n2026-10-26  INFO  outbound: connected to example.com:443"
 	a.snapshot.Config.Templates = []core.Template{{ID: "t", Name: "日常分流模板", Content: core.DefaultTemplate}, {ID: "t2", Name: "轻量直连模板", Content: `{"outbounds":[]}`}}
@@ -391,7 +391,7 @@ func TestPageToolbarsShareAlignment(t *testing.T) {
 			view.Frame()
 			view.Frame()
 			r, ok := view.Find(page.search)
-			if !ok || r.W != 360 || r.H != 36 {
+			if !ok || r.H != 36 || (page.name != "proxies" && r.W != 360) || (page.name == "proxies" && (r.W < 120 || r.W > 360)) {
 				t.Fatalf("%s search has inconsistent size at %v: %+v", page.name, size, r)
 			}
 			if i == 0 {

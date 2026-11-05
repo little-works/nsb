@@ -28,6 +28,12 @@ var icons = map[string]*ui.SVG{
 	"kernel":      svg(`<rect x="6" y="6" width="12" height="12" rx="3"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/>`),
 	"archive":     svg(`<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9m-9 4h4"/>`),
 	"check":       svg(`<path d="m5 12 4 4L19 6"/>`),
+	"speed":       svg(`<path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M5 13h1m12 0h1M8 6l1 1"/><circle cx="12" cy="13" r="2"/>`),
+	"locate":      svg(`<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>`),
+	"stop":        svg(`<rect x="6" y="6" width="12" height="12" rx="2"/>`),
+	"edit":        svg(`<path d="m15 4 5 5M4 20l5-1L20 8a2.1 2.1 0 0 0-5-5L4 14Z"/>`),
+	"code":        svg(`<path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/>`),
+	"delete":      svg(`<path d="M3 6h18M9 6V3h6v3M5 6l1 14h12l1-14M10 10v6m4-6v6"/>`),
 }
 
 func setAppTheme(c *ui.Context) {
@@ -96,6 +102,16 @@ func iconButton(c *ui.Context, icon *ui.SVG, label string) ui.Element {
 			ui.Text(c, label)
 		}
 	})
+}
+
+func textIconButton(c *ui.Context, icon *ui.SVG, label string) ui.Element {
+	b := ui.ButtonBase(c).Size(36, 36).Radius(6).Label(label).Tooltip(label).TextColor(c.Theme().TextMuted)
+	if b.Pressed() {
+		b.Background(c.Theme().SurfacePressed)
+	} else if b.Hovered() {
+		b.Background(c.Theme().SurfaceHover)
+	}
+	return b.Children(func() { ui.Icon(c, icon).Size(18, 18) })
 }
 func section(c *ui.Context, icon *ui.SVG, title string) {
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
