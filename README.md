@@ -4,7 +4,7 @@ Go + MyGo native 的 sing-box 桌面管理器，当前聚焦 Windows 复刻。�
 
 ## 开发
 
-开发环境需要 Go 1.27.1 或更高版本。
+开发环境需要 Go 1.27.3 或更高版本。
 
 ```sh
 go tool mygo dev .
@@ -40,7 +40,7 @@ Windows 程序和 setup 安装程序由 MyGo 一次构建产出：
 go tool mygo build -platform windows/amd64 .
 ```
 
-产物位于 `dist/windows-amd64/`，包括 `NSB.exe` 和 `NSB Setup <version> amd64.exe`。MyGo 自动准备打包工具。版本、图标和程序标识统一在 `mygo.json` 配置。
+产物位于 `dist/windows-amd64/`，包括 `NSB.exe` 和 `nsb-setup-<version>-amd64.exe`。MyGo 自动准备打包工具。版本、图标和程序标识统一在 `mygo.json` 配置。
 
 当前以 Windows 为验收目标，优先完善主要功能与页面体验。
 

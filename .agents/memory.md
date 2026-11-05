@@ -2,7 +2,7 @@
 
 ## 架构与优先级
 
-- 桌面端使用 Go / MyGo native desktop，MyGo 锁定 v0.6.1。
+- 桌面端使用 Go / MyGo native desktop，MyGo 锁定 v0.7.4，Go 最低版本为 1.27.3。
 - 项目按 `gui/core/server` 分层：`gui/app` 实现原生页面，`gui/desktop` 管理内核与桌面服务，`core` 负责订阅解析、组合及存储；`server` 是独立 HTTP 服务入口，目前提供健康检查骨架，职责定位为云端组合订阅计算。
 - Desktop 直接调用本地服务，通过 HTTP client 访问 sing-box Clash API。
 - 当前处于复刻阶段，聚焦 Windows、页面还原和主要功能。优先 MyGo 自带组件，保持清晰、精简的代码结构；验证范围与改动匹配。
@@ -40,4 +40,4 @@
 - 使用稳定的 MyGo keys，Element 生命周期限定于当前 build，持久状态保存数据、控件状态或 Handle；后台结果通过 Window.Update 发布。
 - 按改动运行针对性检查，原生 UI 检查包括相关 GUI 测试及 `go tool mygo vet .`。
 - Windows 打包：`go tool mygo build -platform windows/amd64 -o dist/<名称> .`。
-- 产物位于 `dist/<名称>/windows-amd64/`，包含 `NSB.exe` 和 `NSB Setup <版本> amd64.exe`。每次试用打包使用新目录，保持用户当前实例运行；切换单实例程序前由用户从托盘退出旧实例。
+- 产物位于 `dist/<名称>/windows-amd64/`，包含 `NSB.exe` 和 `nsb-setup-<版本>-amd64.exe`，沿用 MyGo 默认命名。每次试用打包使用新目录，保持用户当前实例运行；切换单实例程序前由用户从托盘退出旧实例。
