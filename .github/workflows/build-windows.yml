@@ -19,8 +19,15 @@ jobs:
       - name: Build native desktop and installer
         shell: pwsh
         run: go tool mygo build -platform windows/amd64 .
-      - uses: actions/upload-artifact@v7
+      - name: Upload standalone executable
+        uses: actions/upload-artifact@v7
         with:
-          name: NSB-windows-x64
-          path: dist/windows-amd64/*.exe
+          path: dist/windows-amd64/NSB.exe
+          archive: false
+          if-no-files-found: error
+      - name: Upload setup installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/windows-amd64/nsb-setup-*-amd64.exe
+          archive: false
           if-no-files-found: error
