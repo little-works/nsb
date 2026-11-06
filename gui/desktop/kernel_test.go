@@ -136,14 +136,8 @@ func helperKernel(t *testing.T) *Kernel {
 }
 func TestManagerStartsKernelWithRelativeDirectories(t *testing.T) {
 	k := helperKernel(t)
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	relative, err := filepath.Rel(cwd, k.dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Chdir(filepath.Dir(k.dir))
+	relative := filepath.Base(k.dir)
 	m, err := Open(filepath.Join(relative, "config"), relative)
 	if err != nil {
 		t.Fatal(err)
