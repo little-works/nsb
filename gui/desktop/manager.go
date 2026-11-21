@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ func Open(configDir, dataDir string) (*Manager, error) {
 	if e != nil {
 		return nil, e
 	}
-	m := &Manager{store: s, service: core.Service{Store: s}, config: c, kernel: NewKernel(dataDir)}
+	m := &Manager{store: s, service: core.Service{Store: s, Client: &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{Proxy: proxyFromSystem}}}, config: c, kernel: NewKernel(dataDir)}
 	if e = m.kernel.Adopt(); e != nil {
 		return nil, e
 	}
