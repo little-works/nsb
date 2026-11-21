@@ -17,6 +17,7 @@ import (
 type App struct {
 	manager                       *desktop.Manager
 	window                        *mygo.Window
+	trayProxy                     *mygo.MenuItem
 	ctx                           context.Context
 	cancel                        context.CancelFunc
 	workers                       sync.WaitGroup
@@ -92,12 +93,15 @@ func (a *App) Run() error {
 		mygo.App.SetLocale(a.language)
 		a.startup = mygo.App.OpenAtLogin()
 		a.window = mygo.NewWindow(mygo.WindowOptions{Title: "Not Sing-Box", Width: 1180, Height: 820, MinWidth: 960, MinHeight: 650, Content: ui.View(a.View)})
+		a.trayProxy = &mygo.MenuItem{Type: mygo.MenuItemCheckbox, Label: "System proxy / 系统代理", Checked: a.proxy}
+		a.trayProxy.Click = func(item *mygo.MenuItem, _ *mygo.Window) { a.setSystemProxy(item.IsChecked()) }
 		tray, e := mygo.NewTray(mygo.TrayOptions{Icon: assets.Icon, ToolTip: "Not Sing-Box", Menu: mygo.NewMenu([]*mygo.MenuItem{
 			{Label: "Show NSB / 显示窗口", Click: func(*mygo.MenuItem, *mygo.Window) { a.window.Show(); a.window.Focus() }},
 			{Label: "Start / 启动", Click: func(*mygo.MenuItem, *mygo.Window) {
 				a.run(func() (string, error) { return "", a.manager.Start(a.ctx) }, nil)
 			}},
 			{Label: "Stop / 停止", Click: func(*mygo.MenuItem, *mygo.Window) { a.run(func() (string, error) { return "", a.manager.Stop() }, nil) }},
+			a.trayProxy,
 			mygo.Separator(), {Role: mygo.RoleQuit},
 		})})
 		a.window.Show()
@@ -169,6 +173,7 @@ func (a *App) run(work func() (string, error), done func(string)) {
 			a.updateSnapshot(s)
 			a.modeSource = ""
 			a.proxy = s.Config.SystemProxyEnabled
+			a.syncTrayProxy()
 			a.language = s.Config.AppLanguage
 			mygo.App.SetLocale(a.language)
 			a.theme = s.Config.AppTheme
@@ -357,4 +362,20 @@ func (a *App) saveConfig(change func(*core.Config)) {
 	a.run(func() (string, error) {
 		return "", a.manager.Edit(func(c *core.Config) error { change(c); return nil })
 	}, nil)
+}
+
+// setSystemProxy applies the tray switch, or puts the check back when the app is busy.
+func (a *App) setSystemProxy(on bool) {
+	if a.busy || a.quitting {
+		a.syncTrayProxy()
+		return
+	}
+	a.proxy = on
+	a.saveConfig(func(cfg *core.Config) { cfg.SystemProxyEnabled = on })
+}
+
+func (a *App) syncTrayProxy() {
+	if a.trayProxy != nil {
+		a.trayProxy.SetChecked(a.proxy)
+	}
 }
