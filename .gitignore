@@ -23,6 +23,7 @@ node_modules
 gui/dev-config/
 
 # Go build output
+/.mygo/
 /build/
 *.test
 *.syso
