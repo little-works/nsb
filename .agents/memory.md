@@ -2,7 +2,7 @@
 
 ## 架构与优先级
 
-- 桌面端使用 Go / MyGo native desktop，MyGo 锁定 v0.7.4，Go 最低版本为 1.27.3。
+- 桌面端使用 Go / MyGo native desktop，MyGo 锁定 v0.10.0，Go 最低版本为 1.27.3。
 - 项目按 `gui/core/server` 分层：`gui/app` 实现原生页面，`gui/desktop` 管理内核与桌面服务，`core` 负责订阅解析、组合及存储；`server` 是独立 HTTP 服务入口，目前提供健康检查骨架，职责定位为云端组合订阅计算。
 - Desktop 直接调用本地服务，通过 HTTP client 访问 sing-box Clash API。
 - 当前处于复刻阶段，聚焦 Windows、页面还原和主要功能。优先 MyGo 自带组件，保持清晰、精简的代码结构；验证范围与改动匹配。
