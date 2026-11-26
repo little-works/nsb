@@ -59,34 +59,21 @@ func (a *App) proxyMembers(proxies map[string]any, group string) []string {
 
 func measureProxies(ctx context.Context, nodes []string, measure func(context.Context, string) (int, error), publish func(string, int)) {
 	var workers sync.WaitGroup
-	jobs := make(chan string)
-	for range min(4, len(nodes)) {
+	for _, node := range nodes {
+		if ctx.Err() != nil {
+			break
+		}
 		workers.Go(func() {
-			for node := range jobs {
-				if ctx.Err() != nil {
-					return
-				}
-				delay, err := measure(ctx, node)
-				if ctx.Err() != nil {
-					return
-				}
-				if err != nil || delay <= 0 {
-					delay = -1
-				}
-				publish(node, delay)
+			delay, err := measure(ctx, node)
+			if ctx.Err() != nil {
+				return
 			}
+			if err != nil || delay <= 0 {
+				delay = -1
+			}
+			publish(node, delay)
 		})
 	}
-	for _, node := range nodes {
-		select {
-		case jobs <- node:
-		case <-ctx.Done():
-			close(jobs)
-			workers.Wait()
-			return
-		}
-	}
-	close(jobs)
 	workers.Wait()
 }
 
@@ -99,18 +86,13 @@ func (a *App) stopProxyTests() {
 		cancel()
 	}
 	clear(a.proxySingleCancel)
+	for _, cancel := range a.proxyGroupCancel {
+		cancel()
+	}
+	clear(a.proxyGroupCancel)
+	clear(a.proxyGroupTesting)
 	a.proxyTestID++
 	clear(a.proxyTesting)
-}
-
-func (a *App) measureProxy(ctx context.Context, node string) (int, error) {
-	select {
-	case a.proxyTestSlots <- struct{}{}:
-		defer func() { <-a.proxyTestSlots }()
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	}
-	return a.manager.Latency(ctx, node)
 }
 
 func (a *App) testProxy(node string) {
@@ -121,7 +103,7 @@ func (a *App) testProxy(node string) {
 	a.proxySingleCancel[node] = cancel
 	a.proxyTesting[node] = true
 	a.workers.Go(func() {
-		delay, err := a.measureProxy(ctx, node)
+		delay, err := a.manager.Latency(ctx, node)
 		a.window.Update(func() {
 			if ctx.Err() != nil || a.quitting {
 				return
@@ -133,6 +115,55 @@ func (a *App) testProxy(node string) {
 				delay = -1
 			}
 			a.delays[node] = delay
+		})
+	})
+}
+
+func (a *App) testGroup(group string, nodes []string) {
+	if a.proxyGroupTesting[group] || a.quitting || !a.snapshot.Running {
+		return
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.proxyGroupCancel[group] = cancel
+	a.proxyGroupTesting[group] = true
+	profileID := ""
+	if a.snapshot.Config.CurrentProfileID != nil {
+		profileID = *a.snapshot.Config.CurrentProfileID
+	}
+	a.workers.Go(func() {
+		delays, err := a.manager.GroupLatency(ctx, group)
+		a.window.Update(func() {
+			if ctx.Err() != nil || a.quitting {
+				return
+			}
+			cancel()
+			delete(a.proxyGroupCancel, group)
+			delete(a.proxyGroupTesting, group)
+			currentID := ""
+			if a.snapshot.Config.CurrentProfileID != nil {
+				currentID = *a.snapshot.Config.CurrentProfileID
+			}
+			if currentID != profileID || !a.snapshot.Running {
+				return
+			}
+			if err != nil {
+				a.status = err.Error()
+				return
+			}
+			proxies := object(a.snapshot.Proxies["proxies"])
+			for _, node := range nodes {
+				delay, tested := delays[node]
+				if !tested {
+					// Failed leaves are omitted from the group result.
+					if _, nested := object(proxies[node])["all"]; nested {
+						continue
+					}
+					delay = -1
+				} else if delay <= 0 {
+					delay = -1
+				}
+				a.delays[node] = delay
+			}
 		})
 	})
 }
@@ -165,7 +196,7 @@ func (a *App) testProxies(nodes []string) {
 	a.proxyTestDone, a.proxyTestTotal = 0, len(unique)
 	a.workers.Go(func() {
 		defer cancel()
-		measureProxies(ctx, unique, a.measureProxy, func(node string, delay int) {
+		measureProxies(ctx, unique, a.manager.Latency, func(node string, delay int) {
 			a.window.Update(func() {
 				if a.quitting || a.proxyTestID != id {
 					return

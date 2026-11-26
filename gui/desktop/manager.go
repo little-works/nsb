@@ -367,6 +367,9 @@ func (m *Manager) CloseConnection(ctx context.Context, id string) error {
 	}
 	return m.kernel.Request(ctx, "DELETE", path, nil, nil)
 }
+
+const latencyProbe = "?timeout=5000&url=https%3A%2F%2Fcp.cloudflare.com%2Fgenerate_204"
+
 func (m *Manager) Latency(ctx context.Context, node string) (int, error) {
 	m.mu.Lock()
 	k := &Kernel{controller: m.kernel.controller, secret: m.kernel.secret}
@@ -374,11 +377,23 @@ func (m *Manager) Latency(ctx context.Context, node string) (int, error) {
 	var out struct {
 		Delay int `json:"delay"`
 	}
-	e := k.Request(ctx, "GET", "/proxies/"+escape(node)+"/delay?timeout=5000&url=https%3A%2F%2Fcp.cloudflare.com%2Fgenerate_204", nil, &out)
+	e := k.Request(ctx, "GET", "/proxies/"+escape(node)+"/delay"+latencyProbe, nil, &out)
 	if e == nil && out.Delay <= 0 {
 		e = fmt.Errorf("proxy latency test returned no valid delay")
 	}
 	return out.Delay, e
+}
+
+func (m *Manager) GroupLatency(ctx context.Context, group string) (map[string]int, error) {
+	m.mu.Lock()
+	k := &Kernel{controller: m.kernel.controller, secret: m.kernel.secret}
+	m.mu.Unlock()
+	out := map[string]int{}
+	e := k.Request(ctx, "GET", "/group/"+escape(group)+"/delay"+latencyProbe, nil, &out)
+	if e != nil {
+		return nil, e
+	}
+	return out, nil
 }
 func (m *Manager) replaceKernel(ctx context.Context, install func() error) error {
 	m.mu.Lock()

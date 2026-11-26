@@ -65,7 +65,7 @@ func TestTextIconButtonHover(t *testing.T) {
 	}
 }
 
-func TestMeasureProxiesBoundsConcurrencyAndPublishesFailures(t *testing.T) {
+func TestMeasureProxiesRunsAllConcurrentlyAndPublishesFailures(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	started := make(chan struct{}, 8)
@@ -101,15 +101,15 @@ func TestMeasureProxiesBoundsConcurrencyAndPublishesFailures(t *testing.T) {
 			results[node] = delay
 		})
 	}()
-	for range 4 {
+	for range len(nodes) {
 		select {
 		case <-started:
 		case <-ctx.Done():
 			t.Fatal("workers did not start")
 		}
 	}
-	if peak.Load() != 4 {
-		t.Fatal("expected four concurrent probes", peak.Load())
+	if peak.Load() != int32(len(nodes)) {
+		t.Fatal("expected every probe to run concurrently", peak.Load())
 	}
 	close(release)
 	select {
@@ -117,7 +117,7 @@ func TestMeasureProxiesBoundsConcurrencyAndPublishesFailures(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("probes did not complete")
 	}
-	if peak.Load() > 4 || len(results) != len(nodes) || results["a"] != 42 || results["failed"] != -1 || results["zero"] != -1 {
+	if peak.Load() > int32(len(nodes)) || len(results) != len(nodes) || results["a"] != 42 || results["failed"] != -1 || results["zero"] != -1 {
 		t.Fatalf("unexpected probe results: %v (peak %d)", results, peak.Load())
 	}
 }
@@ -254,6 +254,37 @@ func TestSingleProxyTestOnlyDisablesItsOwnButton(t *testing.T) {
 	}
 	if !foundSecond {
 		t.Fatal("other nodes must remain available while one node is testing")
+	}
+}
+
+func TestGroupTestOnlyDisablesItsOwnButton(t *testing.T) {
+	a := testApp(t)
+	a.snapshot.Running = true
+	a.snapshot.Proxies = core.Object{"proxies": core.Object{
+		"A group": core.Object{"type": "Selector", "now": "first", "all": []any{"first"}},
+		"B group": core.Object{"type": "Selector", "now": "second", "all": []any{"second"}},
+		"first":   core.Object{"type": "Shadowsocks"},
+		"second":  core.Object{"type": "Shadowsocks"},
+	}}
+	a.proxyGroupTesting["A group"] = true
+	view := ui.NewTester(a.View, 960, 700)
+	view.Frame()
+	foundGroup, foundNode := false, false
+	for range 40 {
+		view.Key(0, ui.KeyTab)
+		view.Frame()
+		if view.Focused("组测速：A group") {
+			t.Fatal("testing group's own button must be disabled")
+		}
+		if view.Focused("组测速：B group") {
+			foundGroup = true
+		}
+		if view.Focused("测速：first") {
+			foundNode = true
+		}
+	}
+	if !foundGroup || !foundNode {
+		t.Fatalf("other group %v / node %v must remain available during a group test", foundGroup, foundNode)
 	}
 }
 

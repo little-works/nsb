@@ -52,6 +52,26 @@ func TestLatencyDoesNotHoldManagerLock(t *testing.T) {
 	}
 }
 
+func TestGroupLatencyTestsWholeGroup(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		fmt.Fprint(w, `{"first":42,"second":0}`)
+	}))
+	defer server.Close()
+	m := &Manager{kernel: &Kernel{controller: server.URL}}
+	delays, err := m.GroupLatency(context.Background(), "PROXY group")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/group/PROXY group/delay" {
+		t.Fatalf("unexpected path %q", path)
+	}
+	if delays["first"] != 42 || delays["second"] != 0 || len(delays) != 2 {
+		t.Fatalf("unexpected delays %#v", delays)
+	}
+}
+
 func TestLatencyRejectsEmptyOrZeroDelay(t *testing.T) {
 	for _, body := range []string{`{}`, `{"delay":0}`, `{"delay":-1}`} {
 		t.Run(body, func(t *testing.T) {

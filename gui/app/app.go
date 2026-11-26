@@ -38,7 +38,8 @@ type App struct {
 	delays                        map[string]int
 	proxyTesting                  map[string]bool
 	proxySingleCancel             map[string]context.CancelFunc
-	proxyTestSlots                chan struct{}
+	proxyGroupTesting             map[string]bool
+	proxyGroupCancel              map[string]context.CancelFunc
 	proxyTestCancel               context.CancelFunc
 	proxyTestID                   int
 	proxyTestDone, proxyTestTotal int
@@ -67,7 +68,7 @@ func appVersion() string {
 func New(m *desktop.Manager) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := m.Config()
-	return &App{manager: m, ctx: ctx, cancel: cancel, snapshot: desktop.Snapshot{Config: c}, page: "proxies", proxy: c.SystemProxyEnabled, language: c.AppLanguage, theme: c.AppTheme, logLevels: logSelection{true, true, true, true, true, true}, delays: map[string]int{}, proxyTesting: map[string]bool{}, proxySingleCancel: map[string]context.CancelFunc{}, proxyTestSlots: make(chan struct{}, 4)}
+	return &App{manager: m, ctx: ctx, cancel: cancel, snapshot: desktop.Snapshot{Config: c}, page: "proxies", proxy: c.SystemProxyEnabled, language: c.AppLanguage, theme: c.AppTheme, logLevels: logSelection{true, true, true, true, true, true}, delays: map[string]int{}, proxyTesting: map[string]bool{}, proxySingleCancel: map[string]context.CancelFunc{}, proxyGroupTesting: map[string]bool{}, proxyGroupCancel: map[string]context.CancelFunc{}}
 }
 func (a *App) t(en, zh string) string {
 	if a.language == "zh-CN" {

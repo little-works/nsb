@@ -21,7 +21,6 @@ func sortedKeys(o map[string]any) []string {
 }
 func (a *App) proxyActions(c *ui.Context) {
 	proxies := object(a.snapshot.Proxies["proxies"])
-	groups := a.proxyGroups(proxies)
 	actual := text(a.snapshot.ClashConfig["mode"])
 	if actual != a.modeSource {
 		a.modeSource = actual
@@ -51,9 +50,9 @@ func (a *App) proxyActions(c *ui.Context) {
 			return
 		}
 		nodes := []string{}
-		for _, group := range groups {
-			for _, node := range array(object(proxies[group])["all"]) {
-				nodes = append(nodes, text(node))
+		for _, name := range sortedKeys(proxies) {
+			if _, group := object(proxies[name])["all"]; !group {
+				nodes = append(nodes, name)
 			}
 		}
 		a.testProxies(nodes)
@@ -125,13 +124,16 @@ func (a *App) proxiesView(c *ui.Context) {
 								a.proxyFilter = ""
 								a.proxyJumpGroup, a.proxyJumpNode = name, text(group["now"])
 							})
-							textIconButton(c, icons["speed"], a.t("Test group ", "组测速：")+name).Disabled(a.proxyTestCancel != nil || len(all) == 0).OnClick(func() {
+							textIconButton(c, icons["speed"], a.t("Test group ", "组测速：")+name).Disabled(a.proxyGroupTesting[name] || len(all) == 0).OnClick(func() {
 								nodes := []string{}
 								for _, node := range all {
 									nodes = append(nodes, text(node))
 								}
-								a.testProxies(nodes)
+								a.testGroup(name, nodes)
 							})
+							if a.proxyGroupTesting[name] {
+								muted(c, a.t("Testing…", "测速中…"))
+							}
 						})
 						if len(all) == 0 {
 							muted(c, a.t("No available nodes in this group.", "此分组暂无可用节点。"))
